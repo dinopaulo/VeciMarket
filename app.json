@@ -1,0 +1,34 @@
+{
+  "expo": {
+    "name": "VeciMarket",
+    "slug": "VeciMarket",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/iconn.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#000000",
+      "hideExponentText": true
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/iconn.png",
+        "backgroundColor": "#FFFFFF"
+      },
+      "package": "com.anonymous.VeciMarket"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "3ae0134c-f219-43d4-a7c2-c317a3cec499"
+      },
+      "supabaseUrl": "https://qbgjqnggftonicxluphi.supabase.co",
+      "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFiZ2pxbmdnZnRvbmljeGx1cGhpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU1Mzc1NTQsImV4cCI6MjA3MTExMzU1NH0.mrR4pzEzRLQI0CibFJWUbk6lsFC3dDLWP2_3OdDzZng"
+    }
+  }
+}

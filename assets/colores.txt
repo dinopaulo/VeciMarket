@@ -1,0 +1,4 @@
+quiero establecerte que esta sera mi paleta de colores:
+primario: #131629
+secundario: #e06f33
+terciario: #ffffff

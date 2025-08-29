@@ -1,0 +1,16 @@
+{
+  "appName": "VeciMarket",
+  "packageName": "com.anonymous.VeciMarket",
+  "version": "1.0.0",
+  "icon": "./assets/iconn.png",
+  "splash": {
+    "image": "./assets/splash.png",
+    "backgroundColor": "#000000"
+  },
+  "android": {
+    "adaptiveIcon": {
+      "foregroundImage": "./assets/iconn.png",
+      "backgroundColor": "#FFFFFF"
+    }
+  }
+}
