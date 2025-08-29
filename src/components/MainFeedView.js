@@ -3,6 +3,7 @@ import { View, StyleSheet, ScrollView, TouchableOpacity, Image, Text, Dimensions
 import { Input, Button, Card, Layout, Icon, Text as UIText, TopNavigation, TopNavigationAction } from '@ui-kitten/components';
 import { supabase } from '../lib/supabase';
 import colors from '../lib/colors';
+import CartView from './CartView';
 
 export default function MainFeedView({ userProfile, onNavigateToBusiness, onLogout }) {
   const [publications, setPublications] = useState([]);
@@ -697,39 +698,7 @@ export default function MainFeedView({ userProfile, onNavigateToBusiness, onLogo
 
   // Renderizar vista de carrito
   const renderCarritoView = () => (
-    <>
-      <View style={styles.enhancedHeader}>
-        <View style={styles.headerBackground}>
-          <View style={styles.headerGradient} />
-        </View>
-        
-        <View style={styles.headerContent}>
-          <View style={styles.headerLeft}>
-            <View style={styles.appLogoContainer}>
-              <ShoppingCartIcon style={styles.appLogoIcon} fill={colors.secondary} />
-            </View>
-            <View style={styles.appTitleContainer}>
-              <Text style={styles.appTitle}>Carrito</Text>
-              <Text style={styles.appSubtitle}>Tus compras pendientes</Text>
-            </View>
-          </View>
-        </View>
-      </View>
-      
-      <ScrollView 
-        style={styles.content}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.contentContainer}
-      >
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyStateIcon}>🛒</Text>
-          <Text style={styles.emptyStateText}>Tu carrito está vacío</Text>
-          <Text style={styles.emptyStateSubtext}>
-            Agrega productos de los negocios para comenzar a comprar
-          </Text>
-        </View>
-      </ScrollView>
-    </>
+    <CartView onNavigateToTab={(tabIndex) => setActiveTab(['inicio', 'negocios', 'favoritos', 'carrito', 'negocio', 'perfil'][tabIndex])} />
   );
 
   // Renderizar vista de perfil

@@ -44,6 +44,129 @@ export default function ProductDetailView({ product, onBack, onEdit, onDelete })
     return `$${price.toFixed(2)}`;
   };
 
+  // Función para agregar al carrito
+  const addToCart = async () => {
+    try {
+      // Obtener el usuario actual
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        Alert.alert(
+          'Error',
+          'Debes iniciar sesión para agregar productos al carrito',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+
+      // Verificar si ya existe un carrito para este negocio
+      const { data: existingCart, error: cartError } = await supabase
+        .from('carrito')
+        .select('id')
+        .eq('usuario_id', user.id)
+        .eq('negocio_id', product.negocio_id)
+        .single();
+
+      let cartId;
+
+      if (cartError && cartError.code !== 'PGRST116') {
+        // Error diferente a "no encontrado"
+        console.error('Error al verificar carrito existente:', cartError);
+        Alert.alert('Error', 'No se pudo verificar el carrito');
+        return;
+      }
+
+      if (existingCart) {
+        // Usar carrito existente
+        cartId = existingCart.id;
+      } else {
+        // Crear nuevo carrito
+        const { data: newCart, error: createCartError } = await supabase
+          .from('carrito')
+          .insert({
+            usuario_id: user.id,
+            negocio_id: product.negocio_id
+          })
+          .select('id')
+          .single();
+
+        if (createCartError) {
+          console.error('Error al crear carrito:', createCartError);
+          Alert.alert('Error', 'No se pudo crear el carrito');
+          return;
+        }
+
+        cartId = newCart.id;
+      }
+
+      // Verificar si el producto ya está en el carrito
+      const { data: existingItem, error: itemError } = await supabase
+        .from('carrito_items')
+        .select('id, cantidad')
+        .eq('carrito_id', cartId)
+        .eq('producto_id', product.id)
+        .single();
+
+      if (itemError && itemError.code !== 'PGRST116') {
+        console.error('Error al verificar item existente:', itemError);
+        Alert.alert('Error', 'No se pudo verificar el producto en el carrito');
+        return;
+      }
+
+      if (existingItem) {
+        // Actualizar cantidad del item existente
+        const newQuantity = existingItem.cantidad + quantity;
+        const { error: updateError } = await supabase
+          .from('carrito_items')
+          .update({ cantidad: newQuantity })
+          .eq('id', existingItem.id);
+
+        if (updateError) {
+          console.error('Error al actualizar cantidad:', updateError);
+          Alert.alert('Error', 'No se pudo actualizar la cantidad en el carrito');
+          return;
+        }
+
+        Alert.alert(
+          'Producto Actualizado',
+          `Se actualizó la cantidad de "${product.nombre}" en tu carrito. Nueva cantidad: ${newQuantity}`,
+          [{ text: 'OK' }]
+        );
+      } else {
+        // Agregar nuevo item al carrito
+        const { error: insertError } = await supabase
+          .from('carrito_items')
+          .insert({
+            carrito_id: cartId,
+            producto_id: product.id,
+            cantidad: quantity
+          });
+
+        if (insertError) {
+          console.error('Error al agregar al carrito:', insertError);
+          Alert.alert('Error', 'No se pudo agregar el producto al carrito');
+          return;
+        }
+
+        Alert.alert(
+          'Producto Agregado',
+          `"${product.nombre}" se agregó exitosamente a tu carrito`,
+          [{ text: 'OK' }]
+        );
+      }
+
+      // Resetear cantidad a 1
+      setQuantity(1);
+
+    } catch (error) {
+      console.error('Error al agregar al carrito:', error);
+      Alert.alert(
+        'Error',
+        'No se pudo agregar el producto al carrito. Inténtalo de nuevo.',
+        [{ text: 'OK' }]
+      );
+    }
+  };
+
   // Función para abrir WhatsApp con mensaje predefinido
   const openWhatsAppOrder = async () => {
     try {
@@ -238,7 +361,7 @@ ${product.stock !== null && product.stock !== undefined ? `📊 *Stock disponibl
             <Button
               style={styles.addToCartButton}
               textStyle={styles.addToCartButtonText}
-              onPress={() => console.log('Agregar al carrito:', product.id)}
+              onPress={addToCart}
             >
               Agregar al Carrito
             </Button>
