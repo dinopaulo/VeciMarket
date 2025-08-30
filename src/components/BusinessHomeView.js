@@ -267,6 +267,37 @@ export default function BusinessHomeView() {
           {renderSearchBar()}
           {renderCategories()}
           
+          {/* Sección de Gestión de Pedidos */}
+          <View style={styles.ordersSection}>
+            <View style={styles.ordersHeader}>
+              <Text style={styles.ordersTitle}>📋 Gestión de Pedidos</Text>
+              <Text style={styles.ordersSubtitle}>Gestiona los pedidos de tus clientes</Text>
+            </View>
+            
+            <TouchableOpacity 
+              style={styles.ordersButton}
+              activeOpacity={0.7}
+              onPress={() => {
+                // Aquí navegaremos a la vista de gestión de pedidos
+                console.log('Navegar a gestión de pedidos');
+              }}
+            >
+              <View style={styles.ordersButtonContent}>
+                <View style={styles.ordersButtonLeft}>
+                  <Text style={styles.ordersButtonTitle}>Ver Pedidos</Text>
+                  <Text style={styles.ordersButtonSubtitle}>
+                    Confirma, rechaza o completa pedidos
+                  </Text>
+                </View>
+                <Icon 
+                  name='arrow-forward-outline' 
+                  style={styles.ordersButtonIcon} 
+                  fill={colors.white}
+                />
+              </View>
+            </TouchableOpacity>
+          </View>
+          
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Publicaciones Recientes</Text>
             <TouchableOpacity activeOpacity={0.7}>
@@ -356,6 +387,60 @@ const styles = StyleSheet.create({
     fontSize: isSmallDevice ? 14 : 16,
     color: colors.secondary,
     fontWeight: '600',
+  },
+  // Estilos para la sección de pedidos
+  ordersSection: {
+    marginBottom: isSmallDevice ? 20 : 24,
+  },
+  ordersHeader: {
+    marginBottom: 16,
+  },
+  ordersTitle: {
+    fontSize: isSmallDevice ? 18 : 20,
+    fontWeight: 'bold',
+    color: colors.primary,
+    marginBottom: 4,
+  },
+  ordersSubtitle: {
+    fontSize: isSmallDevice ? 14 : 16,
+    color: colors.gray,
+    lineHeight: 20,
+  },
+  ordersButton: {
+    backgroundColor: colors.secondary,
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: colors.primary,
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  ordersButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  ordersButtonLeft: {
+    flex: 1,
+  },
+  ordersButtonTitle: {
+    fontSize: isSmallDevice ? 16 : 18,
+    fontWeight: 'bold',
+    color: colors.white,
+    marginBottom: 4,
+  },
+  ordersButtonSubtitle: {
+    fontSize: isSmallDevice ? 13 : 14,
+    color: colors.white + 'CC',
+    lineHeight: 18,
+  },
+  ordersButtonIcon: {
+    width: 24,
+    height: 24,
   },
   categoryChipActive: {
     backgroundColor: colors.secondary,

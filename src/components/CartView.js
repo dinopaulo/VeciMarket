@@ -274,12 +274,19 @@ export default function CartView({ onNavigateToTab }) {
   };
 
   // Función para abrir WhatsApp y eliminar el carrito
-  const openWhatsAppAndDeleteCart = (whatsappUrl, userId, businessId) => {
+  const openWhatsAppAndDeleteCart = (whatsappUrl, userId, businessId, orderId) => {
     Linking.canOpenURL(whatsappUrl).then(supported => {
       if (supported) {
         Linking.openURL(whatsappUrl);
         // Eliminar solo el carrito específico del negocio
         deleteCartAfterOrder(userId, businessId);
+        
+        // Mostrar confirmación del pedido registrado
+        Alert.alert(
+          'Pedido Enviado',
+          `Tu pedido #${orderId} ha sido registrado y enviado por WhatsApp.\n\nEl negocio podrá confirmar tu pedido desde su panel de administración.`,
+          [{ text: 'Entendido' }]
+        );
       } else {
         Alert.alert(
           'Error',
@@ -423,16 +430,65 @@ export default function CartView({ onNavigateToTab }) {
               // Crear el mensaje del pedido para este negocio específico
               const orderMessage = createOrderMessage(business, business.negocio.nombre);
               
+              // Calcular el total del pedido
+              const total = business.items?.reduce((total, item) => {
+                const valor = item.productos?.valor || 0;
+                const cantidad = item.cantidad || 0;
+                return total + (valor * cantidad);
+              }, 0) || 0;
+
+              // Registrar el pedido en la base de datos ANTES de enviar WhatsApp
+              const { data: orderData, error: orderError } = await supabase
+                .from('pedidos')
+                .insert({
+                  usuario_id: user.id,
+                  negocio_id: business.negocio_id,
+                  estado: 'pendiente',
+                  total: total,
+                  canal_pedido: 'whatsapp',
+                  mensaje_whatsapp: orderMessage,
+                  fecha_pedido: new Date().toISOString()
+                })
+                .select()
+                .single();
+
+              if (orderError) {
+                console.error('Error al registrar pedido:', orderError);
+                Alert.alert('Error', 'No se pudo registrar el pedido. Inténtalo de nuevo.');
+                return;
+              }
+
+              console.log('✅ Pedido registrado exitosamente:', orderData.id);
+
+              // Ahora insertar los items del pedido en la tabla pedido_items
+              const orderItems = business.items.map(item => ({
+                pedido_id: orderData.id,
+                producto_id: item.producto_id,
+                cantidad: item.cantidad,
+                precio_unitario: item.productos?.valor || 0,
+                subtotal: (item.productos?.valor || 0) * item.cantidad
+              }));
+
+              const { error: itemsError } = await supabase
+                .from('pedido_items')
+                .insert(orderItems);
+
+              if (itemsError) {
+                console.error('Error al registrar items del pedido:', itemsError);
+                // Aunque falle la inserción de items, continuamos con el pedido
+                console.warn('⚠️ Pedido registrado pero items no se pudieron guardar');
+              } else {
+                console.log('✅ Items del pedido registrados exitosamente');
+              }
+              
               // Codificar el mensaje para la URL
               const encodedMessage = encodeURIComponent(orderMessage);
               
               // Construir la URL de WhatsApp
               const whatsappUrl = `${business.negocio.whatsapp}?text=${encodedMessage}`;
               
-
-              
               // Abrir WhatsApp y eliminar solo este carrito
-              openWhatsAppAndDeleteCart(whatsappUrl, user.id, businessId);
+              openWhatsAppAndDeleteCart(whatsappUrl, user.id, businessId, orderData.id);
             } catch (error) {
               console.error('Error al procesar pedido:', error);
               Alert.alert('Error', 'No se pudo procesar el pedido. Inténtalo de nuevo.');

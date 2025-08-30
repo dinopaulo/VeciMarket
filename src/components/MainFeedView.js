@@ -4,6 +4,7 @@ import { Input, Button, Card, Layout, Icon, Text as UIText, TopNavigation, TopNa
 import { supabase } from '../lib/supabase';
 import colors from '../lib/colors';
 import CartView from './CartView';
+import OrderManagementView from './OrderManagementView';
 
 export default function MainFeedView({ userProfile, onNavigateToBusiness, onLogout }) {
   const [publications, setPublications] = useState([]);
@@ -13,6 +14,10 @@ export default function MainFeedView({ userProfile, onNavigateToBusiness, onLogo
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('inicio');
+  
+  // Estados para gestión de pedidos
+  const [userBusinessId, setUserBusinessId] = useState(null);
+  const [loadingBusiness, setLoadingBusiness] = useState(true);
   
   const { width: screenWidth } = Dimensions.get('window');
   
@@ -42,6 +47,45 @@ export default function MainFeedView({ userProfile, onNavigateToBusiness, onLogo
       loadUserBusiness();
     }
   }, [userProfile, activeTab]);
+
+  // Cargar el negocio del usuario para gestión de pedidos
+  useEffect(() => {
+    const loadUserBusinessForOrders = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          console.log('🔍 No se pudo obtener usuario autenticado');
+          return;
+        }
+
+        console.log('🔍 Usuario autenticado:', user.id, user.email);
+
+        // Buscar el negocio del usuario actual
+        const { data: businessData, error: businessError } = await supabase
+          .from('negocios')
+          .select('id, nombre, categoria')
+          .eq('usuario_id', user.id)
+          .single();
+
+        console.log('🔍 Resultado búsqueda negocio:', { businessData, businessError });
+
+        if (businessError) {
+          console.error('❌ Error al cargar negocio:', businessError);
+          setUserBusinessId(null);
+        } else {
+          console.log('✅ Negocio encontrado:', businessData);
+          setUserBusinessId(businessData?.id);
+        }
+      } catch (error) {
+        console.error('❌ Error al cargar negocio:', error);
+        setUserBusinessId(null);
+      } finally {
+        setLoadingBusiness(false);
+      }
+    };
+
+    loadUserBusinessForOrders();
+  }, []);
 
   // Filtrar negocios cuando cambie la búsqueda o categoría
   useEffect(() => {
@@ -759,6 +803,58 @@ export default function MainFeedView({ userProfile, onNavigateToBusiness, onLogo
     </>
   );
 
+  // Renderizar vista de gestión de pedidos
+  const renderPedidosView = () => {
+    if (loadingBusiness) {
+      return (
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Cargando información del negocio...</Text>
+        </View>
+      );
+    }
+    
+    if (!userBusinessId) {
+      return (
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorTitle}>Error</Text>
+          <Text style={styles.errorMessage}>
+            No se pudo obtener la información de tu negocio.{'\n\n'}
+            Asegúrate de que tu cuenta esté vinculada a un negocio.
+          </Text>
+        </View>
+      );
+    }
+
+    return (
+      <>
+        {/* Header para gestión de pedidos */}
+        <View style={styles.enhancedHeader}>
+          <View style={styles.headerBackground}>
+            <View style={styles.headerGradient} />
+          </View>
+          
+          <View style={styles.headerContent}>
+            <View style={styles.headerLeft}>
+              <TouchableOpacity 
+                style={styles.backButton}
+                onPress={() => setActiveTab('negocio')}
+              >
+                <BackIcon style={styles.backIcon} fill={colors.white} />
+              </TouchableOpacity>
+              <View style={styles.appTitleContainer}>
+                <Text style={styles.appTitle}>Gestión de Pedidos</Text>
+                <Text style={styles.appSubtitle}>Gestiona los pedidos de tus clientes</Text>
+              </View>
+            </View>
+          </View>
+        </View>
+
+        {/* Componente de gestión de pedidos */}
+        <OrderManagementView businessId={userBusinessId} />
+      </>
+    );
+  };
+
   // Renderizar vista de gestión del negocio (solo para dueños de negocio)
   const renderNegocioView = () => (
     <>
@@ -838,6 +934,23 @@ export default function MainFeedView({ userProfile, onNavigateToBusiness, onLogo
                 </View>
               </TouchableOpacity>
               
+              <TouchableOpacity 
+                style={styles.mainActionButton}
+                onPress={() => setActiveTab('pedidos')}
+                activeOpacity={0.7}
+              >
+                <View style={styles.mainActionIcon}>
+                  <Text style={styles.mainActionEmoji}>📋</Text>
+                </View>
+                <Text style={styles.mainActionTitle}>Gestión de Pedidos</Text>
+                <Text style={styles.mainActionSubtitle}>Confirma y gestiona pedidos</Text>
+                <View style={styles.actionButtonIndicator}>
+                  <Text style={styles.actionButtonIndicatorText}>👆 Toca aquí</Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+            
+            <View style={styles.actionButtonsRow}>
               <TouchableOpacity style={styles.mainActionButton}>
                 <View style={styles.mainActionIcon}>
                   <Text style={styles.mainActionEmoji}>📢</Text>
@@ -845,9 +958,7 @@ export default function MainFeedView({ userProfile, onNavigateToBusiness, onLogo
                 <Text style={styles.mainActionTitle}>Crear Publicación</Text>
                 <Text style={styles.mainActionSubtitle}>Promociona tu negocio</Text>
               </TouchableOpacity>
-            </View>
-            
-            <View style={styles.actionButtonsRow}>
+              
               <TouchableOpacity style={styles.mainActionButton}>
                 <View style={styles.mainActionIcon}>
                   <Text style={styles.mainActionEmoji}>📊</Text>
@@ -855,7 +966,9 @@ export default function MainFeedView({ userProfile, onNavigateToBusiness, onLogo
                 <Text style={styles.mainActionTitle}>Analíticas</Text>
                 <Text style={styles.mainActionSubtitle}>Métricas y reportes</Text>
               </TouchableOpacity>
-              
+            </View>
+            
+            <View style={styles.actionButtonsRow}>
               <TouchableOpacity style={styles.mainActionButton}>
                 <View style={styles.mainActionIcon}>
                   <Text style={styles.mainActionEmoji}>⚙️</Text>
@@ -879,6 +992,8 @@ export default function MainFeedView({ userProfile, onNavigateToBusiness, onLogo
         return renderNegociosView();
       case 'negocio':
         return renderNegocioView();
+      case 'pedidos':
+        return renderPedidosView();
       case 'favoritos':
         return renderFavoritosView();
       case 'carrito':
@@ -1551,6 +1666,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
+  backButton: {
+    padding: 8,
+    marginRight: 12,
+    borderRadius: 8,
+    backgroundColor: colors.white + '20',
+  },
+  backIcon: {
+    width: 24,
+    height: 24,
+  },
   appLogoContainer: {
     width: 50,
     height: 50,
@@ -1800,5 +1925,40 @@ const styles = StyleSheet.create({
     opacity: 0.7,
     textAlign: 'center',
     lineHeight: 20,
+  },
+  // Estilos para contenedor de error
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+    backgroundColor: colors.white,
+  },
+  errorTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: colors.danger,
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  errorMessage: {
+    fontSize: 16,
+    color: colors.primary,
+    textAlign: 'center',
+    lineHeight: 24,
+  },
+  // Estilos para contenedor de carga
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+    backgroundColor: colors.white,
+  },
+  loadingText: {
+    fontSize: 18,
+    color: colors.primary,
+    textAlign: 'center',
+    lineHeight: 24,
   },
 });
