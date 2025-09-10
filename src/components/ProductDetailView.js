@@ -6,7 +6,8 @@ import {
   Layout, 
   Icon, 
   Card, 
-  Spinner
+  Spinner,
+  Modal
 } from '@ui-kitten/components';
 import colors from '../lib/colors';
 import { supabase } from '../lib/supabase';
@@ -14,6 +15,10 @@ import { supabase } from '../lib/supabase';
 export default function ProductDetailView({ product, onBack, onEdit, onDelete }) {
   const { width } = Dimensions.get('window');
   const [quantity, setQuantity] = useState(1);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [showErrorModal, setShowErrorModal] = useState(false);
+  const [modalMessage, setModalMessage] = useState('');
+  const [modalTitle, setModalTitle] = useState('');
 
   // Iconos
   const BackIcon = (props) => <Icon {...props} name='arrow-back'/>;
@@ -25,6 +30,8 @@ export default function ProductDetailView({ product, onBack, onEdit, onDelete })
   const CalendarIcon = (props) => <Icon {...props} name='calendar'/>;
   const TagIcon = (props) => <Icon {...props} name='pricetags'/>;
   const InfoIcon = (props) => <Icon {...props} name='info'/>;
+  const CheckIcon = (props) => <Icon {...props} name='checkmark-circle'/>;
+  const AlertIcon = (props) => <Icon {...props} name='alert-circle'/>;
 
   // Función para formatear fecha
   const formatDate = (dateString) => {
@@ -50,11 +57,9 @@ export default function ProductDetailView({ product, onBack, onEdit, onDelete })
       // Obtener el usuario actual
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        Alert.alert(
-          'Error',
-          'Debes iniciar sesión para agregar productos al carrito',
-          [{ text: 'OK' }]
-        );
+        setModalTitle('Error');
+        setModalMessage('Debes iniciar sesión para agregar productos al carrito');
+        setShowErrorModal(true);
         return;
       }
 
@@ -71,7 +76,9 @@ export default function ProductDetailView({ product, onBack, onEdit, onDelete })
       if (cartError && cartError.code !== 'PGRST116') {
         // Error diferente a "no encontrado"
         console.error('Error al verificar carrito existente:', cartError);
-        Alert.alert('Error', 'No se pudo verificar el carrito');
+        setModalTitle('Error');
+        setModalMessage('No se pudo verificar el carrito');
+        setShowErrorModal(true);
         return;
       }
 
@@ -91,7 +98,9 @@ export default function ProductDetailView({ product, onBack, onEdit, onDelete })
 
         if (createCartError) {
           console.error('Error al crear carrito:', createCartError);
-          Alert.alert('Error', 'No se pudo crear el carrito');
+          setModalTitle('Error');
+          setModalMessage('No se pudo crear el carrito');
+          setShowErrorModal(true);
           return;
         }
 
@@ -108,7 +117,9 @@ export default function ProductDetailView({ product, onBack, onEdit, onDelete })
 
       if (itemError && itemError.code !== 'PGRST116') {
         console.error('Error al verificar item existente:', itemError);
-        Alert.alert('Error', 'No se pudo verificar el producto en el carrito');
+        setModalTitle('Error');
+        setModalMessage('No se pudo verificar el producto en el carrito');
+        setShowErrorModal(true);
         return;
       }
 
@@ -122,15 +133,15 @@ export default function ProductDetailView({ product, onBack, onEdit, onDelete })
 
         if (updateError) {
           console.error('Error al actualizar cantidad:', updateError);
-          Alert.alert('Error', 'No se pudo actualizar la cantidad en el carrito');
+          setModalTitle('Error');
+          setModalMessage('No se pudo actualizar la cantidad en el carrito');
+          setShowErrorModal(true);
           return;
         }
 
-        Alert.alert(
-          'Producto Actualizado',
-          `Se actualizó la cantidad de "${product.nombre}" en tu carrito. Nueva cantidad: ${newQuantity}`,
-          [{ text: 'OK' }]
-        );
+        setModalTitle('Producto Actualizado');
+        setModalMessage(`Se actualizó la cantidad de "${product.nombre}" en tu carrito. Nueva cantidad: ${newQuantity}`);
+        setShowSuccessModal(true);
       } else {
         // Agregar nuevo item al carrito
         const { error: insertError } = await supabase
@@ -143,15 +154,15 @@ export default function ProductDetailView({ product, onBack, onEdit, onDelete })
 
         if (insertError) {
           console.error('Error al agregar al carrito:', insertError);
-          Alert.alert('Error', 'No se pudo agregar el producto al carrito');
+          setModalTitle('Error');
+          setModalMessage('No se pudo agregar el producto al carrito');
+          setShowErrorModal(true);
           return;
         }
 
-        Alert.alert(
-          'Producto Agregado',
-          `"${product.nombre}" se agregó exitosamente a tu carrito`,
-          [{ text: 'OK' }]
-        );
+        setModalTitle('Producto Agregado');
+        setModalMessage(`"${product.nombre}" se agregó exitosamente a tu carrito`);
+        setShowSuccessModal(true);
       }
 
       // Resetear cantidad a 1
@@ -159,17 +170,18 @@ export default function ProductDetailView({ product, onBack, onEdit, onDelete })
 
     } catch (error) {
       console.error('Error al agregar al carrito:', error);
-      Alert.alert(
-        'Error',
-        'No se pudo agregar el producto al carrito. Inténtalo de nuevo.',
-        [{ text: 'OK' }]
-      );
+      setModalTitle('Error');
+      setModalMessage('No se pudo agregar el producto al carrito. Inténtalo de nuevo.');
+      setShowErrorModal(true);
     }
   };
 
   // Función para abrir WhatsApp con mensaje predefinido
   const openWhatsAppOrder = async () => {
     try {
+      // Obtener el usuario actual
+      const { data: { user } } = await supabase.auth.getUser();
+      
       // Obtener el precio del producto
       const productPrice = product.valor || product.precio || 0;
       const subtotal = productPrice * quantity;
@@ -207,27 +219,58 @@ ${product.stock !== null && product.stock !== undefined ? `📊 *Stock disponibl
 
 🙏 *¡Gracias por tu preferencia!* 🙏`;
 
+      // Preparar datos del pedido
+      const orderData = {
+        negocio_id: product.negocio_id,
+        estado: 'pendiente',
+        total: subtotal,
+        canal_pedido: 'whatsapp',
+        mensaje_whatsapp: orderMessage,
+        fecha_pedido: new Date().toISOString()
+      };
+
+      // Agregar usuario_id si está autenticado
+      if (user) {
+        orderData.usuario_id = user.id;
+      }
+
       // Registrar el pedido en la base de datos
-      const { error: orderError } = await supabase
+      console.log('📝 Datos del pedido a insertar:', orderData);
+      const { data: orderResult, error: orderError } = await supabase
         .from('pedidos')
-        .insert({
-          producto_id: product.id,
-          negocio_id: product.negocio_id,
-          cantidad: quantity,
-          precio_unitario: productPrice,
-          subtotal: subtotal,
-          total: subtotal,
-          estado_pedido: 'pendiente',
-          canal_pedido: 'whatsapp',
-          mensaje_whatsapp: orderMessage,
-          notas: 'Pedido generado automáticamente desde VeciMarket'
-        });
+        .insert(orderData)
+        .select('id')
+        .single();
 
       if (orderError) {
         console.error('Error al registrar pedido:', orderError);
         // Continuar con WhatsApp aunque falle el registro
       } else {
-        console.log('Pedido registrado exitosamente');
+        console.log('Pedido registrado exitosamente:', orderResult);
+        
+        // Registrar el item del pedido en la tabla pedido_items
+        const itemData = {
+          pedido_id: orderResult.id,
+          producto_id: product.id,
+          cantidad: quantity,
+          precio_unitario: productPrice,
+          subtotal: subtotal
+        };
+
+        console.log('📦 Datos del item a insertar:', itemData);
+        const { error: itemError } = await supabase
+          .from('pedido_items')
+          .insert(itemData);
+
+        if (itemError) {
+          console.error('Error al registrar item del pedido:', itemError);
+        } else {
+          console.log('Item del pedido registrado exitosamente');
+        }
+
+        setModalTitle('Pedido Registrado');
+        setModalMessage('Tu pedido ha sido registrado exitosamente. Ahora se abrirá WhatsApp para completar el proceso.');
+        setShowSuccessModal(true);
       }
 
       // Codificar el mensaje para la URL
@@ -241,20 +284,16 @@ ${product.stock !== null && product.stock !== undefined ? `📊 *Stock disponibl
         if (supported) {
           Linking.openURL(whatsappUrl);
         } else {
-          Alert.alert(
-            'Error',
-            'No se puede abrir WhatsApp. Asegúrate de tener la aplicación instalada.',
-            [{ text: 'OK' }]
-          );
+          setModalTitle('Error');
+          setModalMessage('No se puede abrir WhatsApp. Asegúrate de tener la aplicación instalada.');
+          setShowErrorModal(true);
         }
       });
     } catch (error) {
       console.error('Error al procesar pedido:', error);
-      Alert.alert(
-        'Error',
-        'No se pudo procesar el pedido. Inténtalo de nuevo.',
-        [{ text: 'OK' }]
-      );
+      setModalTitle('Error');
+      setModalMessage('No se pudo procesar el pedido. Inténtalo de nuevo.');
+      setShowErrorModal(true);
     }
   };
 
@@ -478,6 +517,52 @@ ${product.stock !== null && product.stock !== undefined ? `📊 *Stock disponibl
           </View>
         </Card>
       </ScrollView>
+
+      {/* Modal de Éxito */}
+      <Modal
+        visible={showSuccessModal}
+        backdropStyle={styles.modalBackdrop}
+        onBackdropPress={() => setShowSuccessModal(false)}
+      >
+        <Card disabled style={styles.modalCard}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalIconContainer}>
+              <CheckIcon style={styles.modalIcon} fill={colors.success} />
+            </View>
+            <Text style={styles.modalTitle}>{modalTitle}</Text>
+            <Text style={styles.modalMessage}>{modalMessage}</Text>
+            <Button
+              style={styles.modalButton}
+              onPress={() => setShowSuccessModal(false)}
+            >
+              Entendido
+            </Button>
+          </View>
+        </Card>
+      </Modal>
+
+      {/* Modal de Error */}
+      <Modal
+        visible={showErrorModal}
+        backdropStyle={styles.modalBackdrop}
+        onBackdropPress={() => setShowErrorModal(false)}
+      >
+        <Card disabled style={styles.modalCard}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalIconContainer}>
+              <AlertIcon style={styles.modalIcon} fill={colors.danger} />
+            </View>
+            <Text style={styles.modalTitle}>{modalTitle}</Text>
+            <Text style={styles.modalMessage}>{modalMessage}</Text>
+            <Button
+              style={[styles.modalButton, styles.errorButton]}
+              onPress={() => setShowErrorModal(false)}
+            >
+              Entendido
+            </Button>
+          </View>
+        </Card>
+      </Modal>
     </Layout>
   );
 }
@@ -713,6 +798,64 @@ const styles = StyleSheet.create({
     width: 20,
     height: 20,
     marginRight: 8,
+  },
+  modalBackdrop: {
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+  },
+  modalCard: {
+    margin: 20,
+    borderRadius: 20,
+    backgroundColor: colors.white,
+    shadowColor: colors.primary,
+    shadowOffset: {
+      width: 0,
+      height: 8,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 24,
+    elevation: 12,
+  },
+  modalContent: {
+    padding: 30,
+    alignItems: 'center',
+  },
+  modalIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: colors.lightGray + '30',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalIcon: {
+    width: 40,
+    height: 40,
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: colors.primary,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  modalMessage: {
+    fontSize: 16,
+    color: colors.gray,
+    textAlign: 'center',
+    lineHeight: 24,
+    marginBottom: 24,
+  },
+  modalButton: {
+    backgroundColor: colors.success,
+    borderColor: colors.success,
+    borderRadius: 12,
+    height: 48,
+    minWidth: 120,
+  },
+  errorButton: {
+    backgroundColor: colors.danger,
+    borderColor: colors.danger,
   },
   productDescription: {
     color: colors.primary,

@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, Alert, Text as RNText, RefreshControl, Dimensions } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, Text as RNText, RefreshControl, Dimensions } from 'react-native';
 import { Layout, Card, Button, Icon, Spinner, Modal, Input } from '@ui-kitten/components';
 import { supabase } from '../lib/supabase';
 import colors from '../lib/colors';
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
+const isSmallScreen = width < 375;
+const isMediumScreen = width >= 375 && width < 414;
+const isLargeScreen = width >= 414;
 
 // Iconos
 const CheckIcon = (props) => (
@@ -20,7 +23,7 @@ const ClockIcon = (props) => (
 );
 
 const DoneIcon = (props) => (
-  <Icon {...props} name='checkmark-done-outline'/>
+  <Icon {...props} name='checkmark-outline'/>
 );
 
 const EyeIcon = (props) => (
@@ -35,6 +38,38 @@ const TrendingIcon = (props) => (
   <Icon {...props} name='trending-up-outline'/>
 );
 
+const FilterIcon = (props) => (
+  <Icon {...props} name='funnel-outline'/>
+);
+
+const CalendarIcon = (props) => (
+  <Icon {...props} name='calendar-outline'/>
+);
+
+const SunIcon = (props) => (
+  <Icon {...props} name='sun-outline'/>
+);
+
+const MoonIcon = (props) => (
+  <Icon {...props} name='moon-outline'/>
+);
+
+const ChevronDownIcon = (props) => (
+  <Icon {...props} name='chevron-down-outline'/>
+);
+
+const ChevronUpIcon = (props) => (
+  <Icon {...props} name='chevron-up-outline'/>
+);
+
+const ModalCheckIcon = (props) => (
+  <Icon {...props} name='checkmark-circle'/>
+);
+
+const ModalAlertIcon = (props) => (
+  <Icon {...props} name='alert-circle'/>
+);
+
 export default function OrderManagementView({ businessId }) {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -44,6 +79,32 @@ export default function OrderManagementView({ businessId }) {
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [newStatus, setNewStatus] = useState('');
   const [notes, setNotes] = useState('');
+  const [selectedDateFilter, setSelectedDateFilter] = useState('todos');
+  const [selectedStatusFilter, setSelectedStatusFilter] = useState('todos');
+  const [filteredOrders, setFilteredOrders] = useState([]);
+  const [showFilters, setShowFilters] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [showErrorModal, setShowErrorModal] = useState(false);
+  const [modalMessage, setModalMessage] = useState('');
+  const [modalTitle, setModalTitle] = useState('');
+
+  // Opciones de filtro por fecha
+  const DATE_FILTERS = [
+    { key: 'todos', label: 'Todos', icon: 'calendar-outline' },
+    { key: 'hoy', label: 'Hoy', icon: 'sun-outline' },
+    { key: 'ayer', label: 'Ayer', icon: 'moon-outline' },
+    { key: 'semana', label: 'Esta semana', icon: 'calendar-outline' },
+    { key: 'mes', label: 'Este mes', icon: 'calendar-outline' }
+  ];
+
+  // Opciones de filtro por estado
+  const STATUS_FILTERS = [
+    { key: 'todos', label: 'Todos', color: '#6C757D' },
+    { key: 'pendiente', label: 'Pendientes', color: '#FF9500' },
+    { key: 'confirmado', label: 'Confirmados', color: '#007AFF' },
+    { key: 'completado', label: 'Completados', color: '#34C759' },
+    { key: 'rechazado', label: 'Rechazados', color: '#FF3B30' }
+  ];
 
   // Estados de pedido
   const ORDER_STATUSES = {
@@ -83,9 +144,15 @@ export default function OrderManagementView({ businessId }) {
   const loadOrders = async () => {
     try {
       setLoading(true);
+      console.log('🔄 OrderManagementView: Iniciando carga de pedidos para negocio:', businessId);
       
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) {
+        console.log('❌ No hay usuario autenticado');
+        return;
+      }
+
+      console.log('👤 Usuario autenticado:', user.id);
 
       // Primero obtener los pedidos
       const { data: ordersData, error: ordersError } = await supabase
@@ -95,16 +162,22 @@ export default function OrderManagementView({ businessId }) {
         .order('fecha_pedido', { ascending: false });
 
       if (ordersError) {
-        console.error('Error al cargar pedidos:', ordersError);
-        Alert.alert('Error', 'No se pudieron cargar los pedidos');
+        console.error('❌ Error al cargar pedidos:', ordersError);
+        setModalTitle('Error');
+        setModalMessage('No se pudieron cargar los pedidos');
+        setShowErrorModal(true);
         return;
       }
+
+      console.log('📦 Pedidos encontrados:', ordersData?.length || 0);
 
       // Luego obtener los items de cada pedido
       const ordersWithItems = await Promise.all(
         (ordersData || []).map(async (order) => {
+          console.log('🔍 Procesando pedido:', order.id);
+          
           // Obtener items del pedido
-          const { data: itemsData } = await supabase
+          const { data: itemsData, error: itemsError } = await supabase
             .from('pedido_items')
             .select(`
               *,
@@ -116,12 +189,24 @@ export default function OrderManagementView({ businessId }) {
             `)
             .eq('pedido_id', order.id);
 
+          if (itemsError) {
+            console.error('❌ Error al cargar items del pedido:', order.id, itemsError);
+          } else {
+            console.log('📋 Items del pedido', order.id, ':', itemsData?.length || 0);
+          }
+
           // Obtener información del usuario
-          const { data: userData } = await supabase
+          const { data: userData, error: userError } = await supabase
             .from('usuarios')
             .select('id, nombre')
             .eq('id', order.usuario_id)
             .single();
+
+          if (userError) {
+            console.error('❌ Error al cargar usuario del pedido:', order.id, userError);
+          } else {
+            console.log('👤 Usuario del pedido', order.id, ':', userData?.nombre || 'No encontrado');
+          }
 
           return {
             ...order,
@@ -131,12 +216,55 @@ export default function OrderManagementView({ businessId }) {
         })
       );
 
+      console.log('✅ Pedidos procesados:', ordersWithItems.length);
       setOrders(ordersWithItems);
+      filterOrders(ordersWithItems, selectedDateFilter, selectedStatusFilter);
     } catch (error) {
       console.error('Error al cargar pedidos:', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  // Función para filtrar pedidos por fecha y estado
+  const filterOrders = (ordersList, dateFilter, statusFilter) => {
+    let filtered = ordersList;
+
+    // Filtrar por fecha
+    if (dateFilter !== 'todos') {
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
+      const weekAgo = new Date(today);
+      weekAgo.setDate(weekAgo.getDate() - 7);
+      const monthAgo = new Date(today);
+      monthAgo.setMonth(monthAgo.getMonth() - 1);
+
+      filtered = filtered.filter(order => {
+        const orderDate = new Date(order.fecha_pedido);
+        
+        switch (dateFilter) {
+          case 'hoy':
+            return orderDate >= today;
+          case 'ayer':
+            return orderDate >= yesterday && orderDate < today;
+          case 'semana':
+            return orderDate >= weekAgo;
+          case 'mes':
+            return orderDate >= monthAgo;
+          default:
+            return true;
+        }
+      });
+    }
+
+    // Filtrar por estado
+    if (statusFilter !== 'todos') {
+      filtered = filtered.filter(order => order.estado === statusFilter);
+    }
+
+    setFilteredOrders(filtered);
   };
 
   useEffect(() => {
@@ -145,10 +273,33 @@ export default function OrderManagementView({ businessId }) {
     }
   }, [businessId]);
 
+  useEffect(() => {
+    filterOrders(orders, selectedDateFilter, selectedStatusFilter);
+  }, [selectedDateFilter, selectedStatusFilter, orders]);
+
   const onRefresh = async () => {
     setRefreshing(true);
     await loadOrders();
     setRefreshing(false);
+  };
+
+  // Función para limpiar todos los filtros
+  const clearFilters = () => {
+    setSelectedDateFilter('todos');
+    setSelectedStatusFilter('todos');
+  };
+
+  // Función para obtener el icono del filtro de fecha
+  const getDateFilterIcon = (filterKey) => {
+    const filter = DATE_FILTERS.find(f => f.key === filterKey);
+    switch (filter?.icon) {
+      case 'sun-outline':
+        return SunIcon;
+      case 'moon-outline':
+        return MoonIcon;
+      default:
+        return CalendarIcon;
+    }
   };
 
   // Cambiar estado del pedido
@@ -181,18 +332,28 @@ export default function OrderManagementView({ businessId }) {
 
       if (updateError) {
         console.error('Error al actualizar pedido:', updateError);
-        Alert.alert('Error', 'No se pudo actualizar el estado del pedido');
+        setModalTitle('Error');
+        setModalMessage('No se pudo actualizar el estado del pedido');
+        setShowErrorModal(true);
         return;
       }
 
-      Alert.alert('Éxito', `Pedido ${ORDER_STATUSES[newStatus].label.toLowerCase()}`);
+      setModalTitle('Éxito');
+      setModalMessage(`Pedido ${ORDER_STATUSES[newStatus].label.toLowerCase()}`);
+      setShowSuccessModal(true);
       setShowStatusModal(false);
       setNewStatus('');
       setNotes('');
-      await loadOrders();
+      
+      // Recargar pedidos después de un pequeño delay para evitar conflictos
+      setTimeout(async () => {
+        await loadOrders();
+      }, 100);
     } catch (error) {
       console.error('Error al cambiar estado:', error);
-      Alert.alert('Error', 'No se pudo cambiar el estado del pedido');
+      setModalTitle('Error');
+      setModalMessage('No se pudo cambiar el estado del pedido');
+      setShowErrorModal(true);
     }
   };
 
@@ -278,11 +439,15 @@ export default function OrderManagementView({ businessId }) {
         <View style={styles.orderActions}>
           <Button
             size="small"
-            appearance="outline"
+            appearance="filled"
+            status="primary"
             style={styles.actionButton}
             onPress={() => {
+              console.log('🔍 Botón "Ver Detalle" presionado para pedido:', order.id);
+              console.log('📋 Datos del pedido:', order);
               setSelectedOrder(order);
               setShowOrderDetail(true);
+              console.log('✅ Modal de detalle activado');
             }}
           >
             Ver Detalle
@@ -338,6 +503,10 @@ export default function OrderManagementView({ businessId }) {
     );
   }
 
+  // Log del estado del modal
+  console.log('🔍 Estado del modal de detalle:', showOrderDetail);
+  console.log('📋 Pedido seleccionado:', selectedOrder?.id);
+
   return (
     <Layout style={styles.container}>
       <View style={styles.header}>
@@ -350,24 +519,116 @@ export default function OrderManagementView({ businessId }) {
           <View style={styles.headerStats}>
             <View style={styles.statItem}>
               <RNText style={styles.statNumber}>
-                {orders.filter(o => o.estado === 'pendiente').length}
+                {filteredOrders.filter(o => o.estado === 'pendiente').length}
               </RNText>
               <RNText style={styles.statLabel}>Pendientes</RNText>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
               <RNText style={styles.statNumber}>
-                {orders.filter(o => o.estado === 'confirmado').length}
+                {filteredOrders.filter(o => o.estado === 'confirmado').length}
               </RNText>
               <RNText style={styles.statLabel}>Confirmados</RNText>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
               <RNText style={styles.statNumber}>
-                {orders.filter(o => o.estado === 'completado').length}
+                {filteredOrders.filter(o => o.estado === 'completado').length}
               </RNText>
               <RNText style={styles.statLabel}>Completados</RNText>
             </View>
+          </View>
+
+          {/* Panel de filtros mejorado */}
+          <View style={styles.filtersContainer}>
+            <TouchableOpacity 
+              style={styles.filtersToggle}
+              onPress={() => setShowFilters(!showFilters)}
+            >
+              <View style={styles.filtersHeader}>
+                <FilterIcon style={styles.filterIcon} fill={colors.white} />
+                <RNText style={styles.filtersTitle}>
+                  Filtros {filteredOrders.length !== orders.length && `(${filteredOrders.length}/${orders.length})`}
+                </RNText>
+                {showFilters ? 
+                  <ChevronUpIcon style={styles.chevronIcon} fill={colors.white} /> :
+                  <ChevronDownIcon style={styles.chevronIcon} fill={colors.white} />
+                }
+              </View>
+            </TouchableOpacity>
+
+            {showFilters && (
+              <View style={styles.filtersPanel}>
+                {/* Filtros por fecha */}
+                <View style={styles.filterSection}>
+                  <RNText style={styles.filterSectionTitle}>📅 Por fecha</RNText>
+                  <ScrollView 
+                    horizontal 
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.filtersScroll}
+                    contentContainerStyle={styles.filtersContent}
+                  >
+                    {DATE_FILTERS.map((filter) => {
+                      const IconComponent = getDateFilterIcon(filter.key);
+                      return (
+                        <TouchableOpacity
+                          key={filter.key}
+                          style={[
+                            styles.filterButton,
+                            selectedDateFilter === filter.key && styles.filterButtonActive
+                          ]}
+                          onPress={() => setSelectedDateFilter(filter.key)}
+                        >
+                          <IconComponent style={styles.filterButtonIcon} fill={selectedDateFilter === filter.key ? colors.primary : colors.white} />
+                          <RNText style={[
+                            styles.filterButtonText,
+                            selectedDateFilter === filter.key && styles.filterButtonTextActive
+                          ]}>
+                            {filter.label}
+                          </RNText>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                </View>
+
+                {/* Filtros por estado */}
+                <View style={styles.filterSection}>
+                  <RNText style={styles.filterSectionTitle}>🏷️ Por estado</RNText>
+                  <ScrollView 
+                    horizontal 
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.filtersScroll}
+                    contentContainerStyle={styles.filtersContent}
+                  >
+                    {STATUS_FILTERS.map((filter) => (
+                      <TouchableOpacity
+                        key={filter.key}
+                        style={[
+                          styles.statusFilterButton,
+                          { borderColor: filter.color },
+                          selectedStatusFilter === filter.key && { backgroundColor: filter.color }
+                        ]}
+                        onPress={() => setSelectedStatusFilter(filter.key)}
+                      >
+                        <View style={[styles.statusIndicator, { backgroundColor: filter.color }]} />
+                        <RNText style={[
+                          styles.statusFilterText,
+                          selectedStatusFilter === filter.key && styles.statusFilterTextActive
+                        ]}>
+                          {filter.label}
+                        </RNText>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+
+                {/* Botón limpiar filtros */}
+                <TouchableOpacity style={styles.clearFiltersButton} onPress={clearFilters}>
+                  <RNText style={styles.clearFiltersText}>🗑️ Limpiar filtros</RNText>
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
         </View>
       </View>
@@ -379,20 +640,25 @@ export default function OrderManagementView({ businessId }) {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
       >
-        {orders.length === 0 ? (
+        {filteredOrders.length === 0 ? (
           <View style={styles.emptyState}>
             <View style={styles.emptyIconContainer}>
               <MessageIcon style={styles.emptyIcon} fill={colors.lightGray} />
             </View>
-            <RNText style={styles.emptyTitle}>No hay pedidos pendientes</RNText>
+            <RNText style={styles.emptyTitle}>
+              {selectedDateFilter === 'todos' ? 'No hay pedidos pendientes' : 'No hay pedidos en este período'}
+            </RNText>
             <RNText style={styles.emptySubtitle}>
-              Los pedidos que reciban tus clientes aparecerán aquí
+              {selectedDateFilter === 'todos' 
+                ? 'Los pedidos que reciban tus clientes aparecerán aquí'
+                : 'Intenta cambiar el filtro de fecha para ver más pedidos'
+              }
             </RNText>
             <View style={styles.emptyDecoration} />
           </View>
         ) : (
           <View style={styles.ordersContainer}>
-            {orders.map(renderOrder)}
+            {filteredOrders.map(renderOrder)}
           </View>
         )}
       </ScrollView>
@@ -401,12 +667,15 @@ export default function OrderManagementView({ businessId }) {
       <Modal
         visible={showOrderDetail}
         backdropStyle={styles.modalBackdrop}
-        onBackdropPress={() => setShowOrderDetail(false)}
+        onBackdropPress={() => {
+          console.log('🔄 Modal cerrado por backdrop');
+          setShowOrderDetail(false);
+        }}
       >
         <Card disabled style={styles.modalCard}>
           <ScrollView 
             style={styles.modalScrollView}
-            showsVerticalScrollIndicator={false}
+            showsVerticalScrollIndicator={true}
             contentContainerStyle={styles.modalScrollContent}
           >
             <View style={styles.modalContent}>
@@ -415,8 +684,9 @@ export default function OrderManagementView({ businessId }) {
                 <View style={styles.modalDivider} />
               </View>
               
-              {selectedOrder && (
+              {selectedOrder ? (
                 <>
+                  {console.log('📋 Renderizando detalle del pedido:', selectedOrder.id)}
                   <View style={styles.orderDetailSection}>
                     <RNText style={styles.orderDetailLabel}>👤 Cliente:</RNText>
                     <RNText style={styles.orderDetailValue}>
@@ -465,16 +735,28 @@ export default function OrderManagementView({ businessId }) {
                     </View>
                   )}
 
-                  <Button
-                    style={styles.modalCloseButton}
-                    onPress={() => setShowOrderDetail(false)}
-                  >
-                    Cerrar
-                  </Button>
+
                 </>
+              ) : (
+                <View style={styles.orderDetailSection}>
+                  <RNText style={styles.orderDetailLabel}>⚠️ Error:</RNText>
+                  <RNText style={styles.orderDetailValue}>
+                    No se pudo cargar la información del pedido
+                  </RNText>
+                </View>
               )}
             </View>
           </ScrollView>
+          
+          <Button
+            style={styles.modalCloseButton}
+            onPress={() => {
+              console.log('🔄 Modal cerrado por botón');
+              setShowOrderDetail(false);
+            }}
+          >
+            Cerrar
+          </Button>
         </Card>
       </Modal>
 
@@ -528,6 +810,55 @@ export default function OrderManagementView({ businessId }) {
           </ScrollView>
         </Card>
       </Modal>
+
+      {/* Modal de Éxito */}
+      <Modal
+        visible={showSuccessModal}
+        backdropStyle={styles.modalBackdrop}
+        onBackdropPress={() => setShowSuccessModal(false)}
+      >
+        <Card disabled style={styles.successModalCard}>
+          <View style={styles.successModalContent}>
+            <View style={styles.successModalIconContainer}>
+              <View style={styles.successModalIconBackground}>
+                <ModalCheckIcon style={styles.successModalIcon} fill={colors.white} />
+              </View>
+            </View>
+            <RNText style={styles.successModalTitle}>¡{modalTitle}!</RNText>
+            <RNText style={styles.successModalMessage}>{modalMessage}</RNText>
+            <View style={styles.successModalDecoration} />
+            <Button
+              style={styles.successModalButton}
+              onPress={() => setShowSuccessModal(false)}
+            >
+              <RNText style={styles.successModalButtonText}>Entendido</RNText>
+            </Button>
+          </View>
+        </Card>
+      </Modal>
+
+      {/* Modal de Error */}
+      <Modal
+        visible={showErrorModal}
+        backdropStyle={styles.modalBackdrop}
+        onBackdropPress={() => setShowErrorModal(false)}
+      >
+        <Card disabled style={styles.modalCard}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalIconContainer}>
+              <ModalAlertIcon style={styles.modalIcon} fill={colors.danger} />
+            </View>
+            <RNText style={styles.modalTitle}>{modalTitle}</RNText>
+            <RNText style={styles.modalMessage}>{modalMessage}</RNText>
+            <Button
+              style={[styles.modalButton, styles.errorButton]}
+              onPress={() => setShowErrorModal(false)}
+            >
+              Entendido
+            </Button>
+          </View>
+        </Card>
+      </Modal>
     </Layout>
   );
 }
@@ -535,14 +866,16 @@ export default function OrderManagementView({ businessId }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#F5F6FA',
   },
-  header: {
-    position: 'relative',
-    paddingTop: 20,
-    paddingBottom: 30,
-    overflow: 'hidden',
-  },
+     header: {
+     position: 'relative',
+     paddingTop: isSmallScreen ? 8 : 10,
+     paddingBottom: isSmallScreen ? 20 : 24,
+     overflow: 'hidden',
+     backgroundColor: colors.primary,
+     marginBottom: isSmallScreen ? -8 : -12,
+   },
   headerGradient: {
     position: 'absolute',
     top: 0,
@@ -550,61 +883,200 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     backgroundColor: colors.primary,
-    opacity: 0.95,
   },
-  headerContent: {
-    paddingHorizontal: 24,
-    alignItems: 'center',
-  },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: colors.white,
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  headerSubtitle: {
-    fontSize: 16,
-    color: colors.white,
-    opacity: 0.9,
-    marginBottom: 20,
-    textAlign: 'center',
-  },
-  headerStats: {
-    flexDirection: 'row',
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    borderRadius: 20,
-    padding: 16,
-    width: '100%',
-    justifyContent: 'space-around',
-  },
+     headerContent: {
+     paddingHorizontal: isSmallScreen ? 16 : 20,
+     paddingTop: isSmallScreen ? 3 : 5,
+     paddingBottom: isSmallScreen ? 8 : 12,
+     alignItems: 'center',
+     zIndex: 1,
+   },
+     headerTitle: {
+     fontSize: isSmallScreen ? 16 : 18,
+     fontWeight: '800',
+     color: colors.white,
+     marginBottom: 2,
+     textAlign: 'center',
+     textShadowColor: 'rgba(0, 0, 0, 0.3)',
+     textShadowOffset: { width: 0, height: 1 },
+     textShadowRadius: 2,
+   },
+     headerSubtitle: {
+     fontSize: isSmallScreen ? 10 : 11,
+     color: colors.white,
+     opacity: 0.9,
+     marginBottom: isSmallScreen ? 6 : 8,
+     textAlign: 'center',
+     fontWeight: '500',
+   },
+     headerStats: {
+     flexDirection: 'row',
+     backgroundColor: 'rgba(255, 255, 255, 0.2)',
+     borderRadius: isSmallScreen ? 8 : 10,
+     padding: isSmallScreen ? 4 : 6,
+     width: '100%',
+     justifyContent: 'space-around',
+     shadowColor: '#000',
+     shadowOffset: { width: 0, height: 2 },
+     shadowOpacity: 0.1,
+     shadowRadius: 4,
+     elevation: 2,
+   },
   statItem: {
     alignItems: 'center',
+    flex: 1,
   },
-  statNumber: {
-    fontSize: 24,
-    fontWeight: 'bold',
+     statNumber: {
+     fontSize: isSmallScreen ? 12 : 14,
+     fontWeight: '800',
+     color: colors.white,
+     marginBottom: 1,
+     textShadowColor: 'rgba(0, 0, 0, 0.3)',
+     textShadowOffset: { width: 0, height: 1 },
+     textShadowRadius: 1,
+   },
+     statLabel: {
+     fontSize: isSmallScreen ? 7 : 8,
+     color: colors.white,
+     opacity: 0.9,
+     textTransform: 'uppercase',
+     letterSpacing: 0.2,
+     fontWeight: '600',
+   },
+     statDivider: {
+     width: 1,
+     backgroundColor: 'rgba(255, 255, 255, 0.4)',
+     height: 20,
+     alignSelf: 'center',
+   },
+     filtersContainer: {
+     marginTop: isSmallScreen ? 6 : 8,
+     marginBottom: isSmallScreen ? 8 : 12,
+     width: '100%',
+   },
+     filtersToggle: {
+     backgroundColor: 'rgba(255, 255, 255, 0.15)',
+     borderRadius: isSmallScreen ? 6 : 8,
+     padding: isSmallScreen ? 4 : 6,
+   },
+  filtersHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+     filterIcon: {
+     width: 14,
+     height: 14,
+     marginRight: 4,
+   },
+     filtersTitle: {
+     fontSize: isSmallScreen ? 10 : 11,
+     color: colors.white,
+     fontWeight: '600',
+     flex: 1,
+     textAlign: 'center',
+   },
+     chevronIcon: {
+     width: 12,
+     height: 12,
+   },
+     filtersPanel: {
+     marginTop: 6,
+     backgroundColor: 'rgba(255, 255, 255, 0.1)',
+     borderRadius: 10,
+     padding: 10,
+   },
+     filterSection: {
+     marginBottom: 10,
+   },
+     filterSectionTitle: {
+     fontSize: 12,
+     color: colors.white,
+     fontWeight: '700',
+     marginBottom: 6,
+     textAlign: 'center',
+   },
+     filtersScroll: {
+     maxHeight: 40,
+   },
+  filtersContent: {
+    paddingHorizontal: 4,
+  },
+     filterButton: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     paddingHorizontal: 10,
+     paddingVertical: 6,
+     borderRadius: 16,
+     backgroundColor: 'rgba(255, 255, 255, 0.2)',
+     marginHorizontal: 3,
+     borderWidth: 1,
+     borderColor: 'rgba(255, 255, 255, 0.3)',
+   },
+  filterButtonActive: {
+    backgroundColor: colors.white,
+    borderColor: colors.white,
+  },
+     filterButtonIcon: {
+     width: 12,
+     height: 12,
+     marginRight: 4,
+   },
+     filterButtonText: {
+     fontSize: 10,
+     color: colors.white,
+     fontWeight: '600',
+   },
+  filterButtonTextActive: {
+    color: colors.primary,
+  },
+     statusFilterButton: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     paddingHorizontal: 10,
+     paddingVertical: 6,
+     borderRadius: 16,
+     backgroundColor: 'rgba(255, 255, 255, 0.1)',
+     marginHorizontal: 3,
+     borderWidth: 2,
+   },
+     statusIndicator: {
+     width: 6,
+     height: 6,
+     borderRadius: 3,
+     marginRight: 4,
+   },
+     statusFilterText: {
+     fontSize: 10,
+     color: colors.white,
+     fontWeight: '600',
+   },
+  statusFilterTextActive: {
     color: colors.white,
-    marginBottom: 4,
+    fontWeight: '700',
   },
-  statLabel: {
-    fontSize: 12,
-    color: colors.white,
-    opacity: 0.8,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  statDivider: {
-    width: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-  },
+     clearFiltersButton: {
+     backgroundColor: 'rgba(255, 255, 255, 0.2)',
+     borderRadius: 10,
+     paddingVertical: 8,
+     paddingHorizontal: 12,
+     alignItems: 'center',
+     borderWidth: 1,
+     borderColor: 'rgba(255, 255, 255, 0.3)',
+   },
+     clearFiltersText: {
+     fontSize: 11,
+     color: colors.white,
+     fontWeight: '600',
+   },
   content: {
     flex: 1,
-    paddingHorizontal: 16,
-    paddingTop: 20,
+    paddingHorizontal: isSmallScreen ? 12 : 20,
+    paddingTop: isSmallScreen ? 12 : 16,
+    backgroundColor: '#F5F6FA',
   },
   ordersContainer: {
-    paddingBottom: 20,
+    paddingBottom: isSmallScreen ? 80 : 100,
   },
   loadingContainer: {
     flex: 1,
@@ -679,91 +1151,111 @@ const styles = StyleSheet.create({
     marginTop: 30,
   },
   orderCard: {
-    marginBottom: 20,
-    borderRadius: 20,
+    marginBottom: isSmallScreen ? 12 : 16,
+    marginHorizontal: isSmallScreen ? 4 : 0,
+    borderRadius: isSmallScreen ? 16 : 20,
     backgroundColor: colors.white,
-    shadowColor: colors.primary,
+    shadowColor: '#000',
     shadowOffset: {
       width: 0,
-      height: 8,
+      height: isSmallScreen ? 2 : 4,
     },
     shadowOpacity: 0.12,
-    shadowRadius: 24,
-    elevation: 8,
+    shadowRadius: isSmallScreen ? 8 : 16,
+    elevation: isSmallScreen ? 4 : 8,
     borderWidth: 0,
+    overflow: 'hidden',
+    minHeight: isSmallScreen ? 200 : 220,
   },
   orderHeader: {
-    flexDirection: 'row',
+    flexDirection: isSmallScreen ? 'column' : 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    padding: 20,
-    paddingBottom: 16,
+    alignItems: isSmallScreen ? 'stretch' : 'flex-start',
+    padding: isSmallScreen ? 16 : 20,
+    paddingBottom: isSmallScreen ? 12 : 16,
+    backgroundColor: '#FAFBFC',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F1F2',
   },
   orderHeaderLeft: {
     flex: 1,
-    marginRight: 16,
+    marginRight: isSmallScreen ? 0 : 20,
+    marginBottom: isSmallScreen ? 12 : 0,
   },
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 25,
+    paddingHorizontal: isSmallScreen ? 10 : 14,
+    paddingVertical: isSmallScreen ? 6 : 8,
+    borderRadius: isSmallScreen ? 20 : 25,
     alignSelf: 'flex-start',
-    marginBottom: 12,
+    marginBottom: isSmallScreen ? 8 : 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   statusIcon: {
-    width: 18,
-    height: 18,
-    marginRight: 8,
+    width: isSmallScreen ? 16 : 20,
+    height: isSmallScreen ? 16 : 20,
+    marginRight: isSmallScreen ? 6 : 10,
   },
   statusText: {
-    fontSize: 13,
-    fontWeight: '700',
+    fontSize: isSmallScreen ? 10 : 12,
+    fontWeight: '800',
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: isSmallScreen ? 0.5 : 0.8,
   },
   orderInfo: {
-    marginTop: 4,
+    marginTop: 6,
   },
   orderId: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.gray,
-    marginBottom: 2,
+    fontSize: isSmallScreen ? 13 : 15,
+    fontWeight: '700',
+    color: '#2C3E50',
+    marginBottom: 4,
   },
   orderDate: {
-    fontSize: 13,
-    color: colors.gray,
-    opacity: 0.8,
+    fontSize: isSmallScreen ? 12 : 14,
+    color: '#7F8C8D',
+    fontWeight: '500',
   },
   orderTotalContainer: {
-    alignItems: 'flex-end',
+    alignItems: isSmallScreen ? 'center' : 'flex-end',
+    backgroundColor: '#F8F9FA',
+    paddingHorizontal: isSmallScreen ? 12 : 16,
+    paddingVertical: isSmallScreen ? 10 : 12,
+    borderRadius: isSmallScreen ? 12 : 16,
+    borderWidth: 1,
+    borderColor: '#E9ECEF',
+    alignSelf: isSmallScreen ? 'stretch' : 'auto',
   },
   orderTotalLabel: {
-    fontSize: 12,
-    color: colors.gray,
-    marginBottom: 4,
+    fontSize: isSmallScreen ? 10 : 11,
+    color: '#6C757D',
+    marginBottom: isSmallScreen ? 4 : 6,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: isSmallScreen ? 0.5 : 0.8,
+    fontWeight: '600',
   },
   orderTotal: {
-    fontSize: 22,
-    fontWeight: '800',
+    fontSize: isSmallScreen ? 20 : 24,
+    fontWeight: '900',
     color: colors.secondary,
   },
   orderItems: {
-    paddingHorizontal: 20,
-    paddingBottom: 16,
+    paddingHorizontal: isSmallScreen ? 16 : 20,
+    paddingVertical: isSmallScreen ? 12 : 16,
   },
   orderItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
-    paddingBottom: 16,
+    marginBottom: isSmallScreen ? 12 : 16,
+    paddingBottom: isSmallScreen ? 12 : 16,
     borderBottomWidth: 1,
-    borderBottomColor: colors.lightGray + '20',
+    borderBottomColor: '#F0F1F2',
   },
   orderItemLeft: {
     flexDirection: 'row',
@@ -771,83 +1263,111 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   orderItemImagePlaceholder: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.primary + '20',
+    width: isSmallScreen ? 40 : 48,
+    height: isSmallScreen ? 40 : 48,
+    borderRadius: isSmallScreen ? 20 : 24,
+    backgroundColor: colors.primary + '15',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: isSmallScreen ? 12 : 16,
+    borderWidth: 2,
+    borderColor: colors.primary + '30',
   },
   orderItemImageText: {
-    fontSize: 16,
-    fontWeight: 'bold',
+    fontSize: isSmallScreen ? 16 : 18,
+    fontWeight: '900',
     color: colors.primary,
   },
   orderItemInfo: {
     flex: 1,
   },
   orderItemName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.primary,
-    marginBottom: 4,
+    fontSize: isSmallScreen ? 15 : 17,
+    fontWeight: '700',
+    color: '#2C3E50',
+    marginBottom: isSmallScreen ? 4 : 6,
+    lineHeight: isSmallScreen ? 20 : 22,
   },
   orderItemDetails: {
-    fontSize: 14,
-    color: colors.gray,
-    opacity: 0.8,
+    fontSize: isSmallScreen ? 13 : 15,
+    color: '#7F8C8D',
+    fontWeight: '500',
   },
   orderItemRight: {
     alignItems: 'flex-end',
+    backgroundColor: '#F8F9FA',
+    paddingHorizontal: isSmallScreen ? 10 : 12,
+    paddingVertical: isSmallScreen ? 6 : 8,
+    borderRadius: isSmallScreen ? 10 : 12,
+    borderWidth: 1,
+    borderColor: '#E9ECEF',
   },
   orderItemSubtotal: {
-    fontSize: 16,
-    fontWeight: '700',
+    fontSize: isSmallScreen ? 15 : 17,
+    fontWeight: '800',
     color: colors.secondary,
   },
   orderFooter: {
-    paddingHorizontal: 20,
-    paddingBottom: 16,
+    paddingHorizontal: isSmallScreen ? 16 : 20,
+    paddingVertical: isSmallScreen ? 12 : 16,
     borderTopWidth: 1,
-    borderTopColor: colors.lightGray + '20',
-    paddingTop: 16,
+    borderTopColor: '#F0F1F2',
+    backgroundColor: '#FAFBFC',
   },
   orderCustomer: {
-    fontSize: 14,
-    color: colors.gray,
-    fontStyle: 'italic',
+    fontSize: isSmallScreen ? 13 : 15,
+    color: '#2C3E50',
+    fontWeight: '600',
+    marginBottom: isSmallScreen ? 8 : 12,
   },
   orderActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    padding: 20,
-    paddingTop: 0,
-    gap: 12,
+    flexDirection: isSmallScreen ? 'column' : 'row',
+    justifyContent: 'space-between',
+    gap: isSmallScreen ? 8 : 12,
   },
   actionButton: {
     flex: 1,
-    borderRadius: 12,
-    height: 44,
+    borderRadius: isSmallScreen ? 12 : 16,
+    height: isSmallScreen ? 40 : 48,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   confirmButton: {
-    backgroundColor: '#34C759',
-    borderColor: '#34C759',
+    backgroundColor: '#28A745',
+    borderColor: '#28A745',
+    shadowColor: '#28A745',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 4,
   },
   rejectButton: {
-    backgroundColor: '#FF3B30',
-    borderColor: '#FF3B30',
+    backgroundColor: '#DC3545',
+    borderColor: '#DC3545',
+    shadowColor: '#DC3545',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 4,
   },
   completeButton: {
     backgroundColor: '#007AFF',
     borderColor: '#007AFF',
+    shadowColor: '#007AFF',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 4,
   },
   modalBackdrop: {
     backgroundColor: 'rgba(0, 0, 0, 0.6)',
   },
   modalCard: {
-    margin: 20,
-    borderRadius: 24,
+    margin: isSmallScreen ? 12 : 20,
+    borderRadius: isSmallScreen ? 20 : 24,
     backgroundColor: colors.white,
     shadowColor: colors.primary,
     shadowOffset: {
@@ -857,26 +1377,28 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 24,
     elevation: 12,
-    maxHeight: '80%',
+    maxHeight: '90%',
+    minHeight: isSmallScreen ? 300 : 400,
   },
   modalScrollView: {
-    flex: 1,
+    maxHeight: '90%',
   },
   modalScrollContent: {
-    flexGrow: 1,
+    paddingBottom: 20,
   },
   modalContent: {
-    padding: 24,
+    padding: isSmallScreen ? 16 : 20,
+    paddingBottom: isSmallScreen ? 20 : 30,
   },
   modalHeader: {
     alignItems: 'center',
     marginBottom: 24,
   },
   modalTitle: {
-    fontSize: 24,
+    fontSize: isSmallScreen ? 20 : 24,
     fontWeight: '800',
     color: colors.primary,
-    marginBottom: 16,
+    marginBottom: isSmallScreen ? 12 : 16,
     textAlign: 'center',
   },
   modalDivider: {
@@ -886,18 +1408,18 @@ const styles = StyleSheet.create({
     borderRadius: 2,
   },
   orderDetailSection: {
-    marginBottom: 20,
+    marginBottom: isSmallScreen ? 16 : 20,
   },
   orderDetailLabel: {
-    fontSize: 14,
+    fontSize: isSmallScreen ? 12 : 14,
     fontWeight: '700',
     color: colors.gray,
-    marginBottom: 8,
+    marginBottom: isSmallScreen ? 6 : 8,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   orderDetailValue: {
-    fontSize: 16,
+    fontSize: isSmallScreen ? 14 : 16,
     color: colors.primary,
     fontWeight: '500',
   },
@@ -909,7 +1431,7 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   orderDetailTotal: {
-    fontSize: 20,
+    fontSize: isSmallScreen ? 18 : 20,
     fontWeight: '800',
     color: colors.secondary,
   },
@@ -942,8 +1464,161 @@ const styles = StyleSheet.create({
   modalCloseButton: {
     backgroundColor: colors.secondary,
     borderColor: colors.secondary,
-    marginTop: 8,
-    borderRadius: 12,
-    height: 48,
+    margin: isSmallScreen ? 16 : 20,
+    marginTop: 0,
+    borderRadius: isSmallScreen ? 10 : 12,
+    height: isSmallScreen ? 40 : 48,
+  },
+  modalBackdrop: {
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+  },
+  modalCard: {
+    margin: isSmallScreen ? 12 : 20,
+    borderRadius: isSmallScreen ? 16 : 20,
+    backgroundColor: colors.white,
+    shadowColor: colors.primary,
+    shadowOffset: {
+      width: 0,
+      height: 8,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 24,
+    elevation: 12,
+  },
+  modalContent: {
+    padding: isSmallScreen ? 20 : 30,
+    alignItems: 'center',
+  },
+  modalIconContainer: {
+    width: isSmallScreen ? 60 : 80,
+    height: isSmallScreen ? 60 : 80,
+    borderRadius: isSmallScreen ? 30 : 40,
+    backgroundColor: colors.lightGray + '30',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: isSmallScreen ? 16 : 20,
+  },
+  modalIcon: {
+    width: isSmallScreen ? 30 : 40,
+    height: isSmallScreen ? 30 : 40,
+  },
+  modalTitle: {
+    fontSize: isSmallScreen ? 18 : 22,
+    fontWeight: 'bold',
+    color: colors.primary,
+    marginBottom: isSmallScreen ? 8 : 12,
+    textAlign: 'center',
+  },
+  modalMessage: {
+    fontSize: isSmallScreen ? 14 : 16,
+    color: colors.gray,
+    textAlign: 'center',
+    lineHeight: isSmallScreen ? 20 : 24,
+    marginBottom: isSmallScreen ? 20 : 24,
+  },
+  modalButton: {
+    backgroundColor: colors.success,
+    borderColor: colors.success,
+    borderRadius: isSmallScreen ? 10 : 12,
+    height: isSmallScreen ? 40 : 48,
+    minWidth: isSmallScreen ? 100 : 120,
+  },
+  errorButton: {
+    backgroundColor: colors.danger,
+    borderColor: colors.danger,
+  },
+  // Estilos específicos para el modal de éxito
+  successModalCard: {
+    margin: isSmallScreen ? 20 : 30,
+    borderRadius: isSmallScreen ? 24 : 28,
+    backgroundColor: colors.white,
+    shadowColor: colors.success,
+    shadowOffset: {
+      width: 0,
+      height: 12,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 24,
+    elevation: 16,
+    borderWidth: 2,
+    borderColor: colors.success + '20',
+  },
+  successModalContent: {
+    padding: isSmallScreen ? 24 : 32,
+    alignItems: 'center',
+    backgroundColor: 'linear-gradient(135deg, #ffffff 0%, #f8fff8 100%)',
+  },
+  successModalIconContainer: {
+    marginBottom: isSmallScreen ? 20 : 24,
+  },
+  successModalIconBackground: {
+    width: isSmallScreen ? 80 : 100,
+    height: isSmallScreen ? 80 : 100,
+    borderRadius: isSmallScreen ? 40 : 50,
+    backgroundColor: colors.success,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: colors.success,
+    shadowOffset: {
+      width: 0,
+      height: 8,
+    },
+    shadowOpacity: 0.4,
+    shadowRadius: 16,
+    elevation: 8,
+    borderWidth: 4,
+    borderColor: colors.white,
+  },
+  successModalIcon: {
+    width: isSmallScreen ? 40 : 50,
+    height: isSmallScreen ? 40 : 50,
+  },
+  successModalTitle: {
+    fontSize: isSmallScreen ? 22 : 26,
+    fontWeight: '900',
+    color: colors.success,
+    marginBottom: isSmallScreen ? 12 : 16,
+    textAlign: 'center',
+    textShadowColor: 'rgba(0, 0, 0, 0.1)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  successModalMessage: {
+    fontSize: isSmallScreen ? 16 : 18,
+    color: colors.gray,
+    textAlign: 'center',
+    lineHeight: isSmallScreen ? 22 : 26,
+    marginBottom: isSmallScreen ? 20 : 24,
+    fontWeight: '500',
+  },
+  successModalDecoration: {
+    width: isSmallScreen ? 60 : 80,
+    height: isSmallScreen ? 4 : 6,
+    backgroundColor: colors.success + '30',
+    borderRadius: isSmallScreen ? 2 : 3,
+    marginBottom: isSmallScreen ? 20 : 24,
+  },
+  successModalButton: {
+    backgroundColor: colors.success,
+    borderColor: colors.success,
+    borderRadius: isSmallScreen ? 16 : 20,
+    height: isSmallScreen ? 48 : 56,
+    minWidth: isSmallScreen ? 140 : 160,
+    shadowColor: colors.success,
+    shadowOffset: {
+      width: 0,
+      height: 6,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 6,
+    borderWidth: 0,
+  },
+  successModalButtonText: {
+    color: colors.white,
+    fontSize: isSmallScreen ? 16 : 18,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
 });

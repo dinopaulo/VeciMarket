@@ -39,11 +39,23 @@ const ChevronUpIcon = (props) => (
   <Icon {...props} name='chevron-up-outline'/>
 );
 
+const CheckIcon = (props) => (
+  <Icon {...props} name='checkmark-circle'/>
+);
+
+const AlertIcon = (props) => (
+  <Icon {...props} name='alert-circle'/>
+);
+
 export default function CartView({ onNavigateToTab }) {
   const [cartItems, setCartItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showNavigationModal, setShowNavigationModal] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [showErrorModal, setShowErrorModal] = useState(false);
+  const [modalMessage, setModalMessage] = useState('');
+  const [modalTitle, setModalTitle] = useState('');
   
 
 
@@ -57,7 +69,9 @@ export default function CartView({ onNavigateToTab }) {
 
       if (userError) {
         console.error('❌ Error al obtener usuario:', userError);
-        Alert.alert('Error', 'No se pudo obtener información del usuario');
+        setModalTitle('Error');
+        setModalMessage('No se pudo obtener información del usuario');
+        setShowErrorModal(true);
         return;
       }
 
@@ -87,7 +101,9 @@ export default function CartView({ onNavigateToTab }) {
 
       if (cartsError) {
         console.error('❌ Error al cargar carritos:', cartsError);
-        Alert.alert('Error', 'No se pudieron cargar los carritos');
+        setModalTitle('Error');
+        setModalMessage('No se pudieron cargar los carritos');
+        setShowErrorModal(true);
         return;
       }
 
@@ -183,7 +199,9 @@ export default function CartView({ onNavigateToTab }) {
       setCartItems(validCarts);
     } catch (error) {
       console.error('❌ Error general al cargar datos del carrito:', error);
-      Alert.alert('Error', 'No se pudieron cargar los datos del carrito');
+      setModalTitle('Error');
+      setModalMessage('No se pudieron cargar los datos del carrito');
+      setShowErrorModal(true);
     } finally {
       setLoading(false);
       console.log('🏁 Carga de datos del carrito completada');
@@ -282,17 +300,13 @@ export default function CartView({ onNavigateToTab }) {
         deleteCartAfterOrder(userId, businessId);
         
         // Mostrar confirmación del pedido registrado
-        Alert.alert(
-          'Pedido Enviado',
-          `Tu pedido #${orderId} ha sido registrado y enviado por WhatsApp.\n\nEl negocio podrá confirmar tu pedido desde su panel de administración.`,
-          [{ text: 'Entendido' }]
-        );
+        setModalTitle('Pedido Enviado');
+        setModalMessage(`Tu pedido #${orderId} ha sido registrado y enviado por WhatsApp.\n\nEl negocio podrá confirmar tu pedido desde su panel de administración.`);
+        setShowSuccessModal(true);
       } else {
-        Alert.alert(
-          'Error',
-          'No se puede abrir WhatsApp. Asegúrate de tener la aplicación instalada.',
-          [{ text: 'OK' }]
-        );
+        setModalTitle('Error');
+        setModalMessage('No se puede abrir WhatsApp. Asegúrate de tener la aplicación instalada.');
+        setShowErrorModal(true);
       }
     });
   };
@@ -316,7 +330,9 @@ export default function CartView({ onNavigateToTab }) {
 
       if (error) {
         console.error('Error al actualizar cantidad:', error);
-        Alert.alert('Error', 'No se pudo actualizar la cantidad');
+        setModalTitle('Error');
+        setModalMessage('No se pudo actualizar la cantidad');
+        setShowErrorModal(true);
         return;
       }
 
@@ -336,7 +352,9 @@ export default function CartView({ onNavigateToTab }) {
 
       if (error) {
         console.error('Error al remover item:', error);
-        Alert.alert('Error', 'No se pudo remover el item');
+        setModalTitle('Error');
+        setModalMessage('No se pudo remover el item');
+        setShowErrorModal(true);
         return;
       }
 
@@ -392,7 +410,9 @@ export default function CartView({ onNavigateToTab }) {
     // Encontrar el negocio específico
     const business = cartItems.find(b => b.id === businessId);
     if (!business) {
-      Alert.alert('Error', 'No se encontró información del negocio');
+      setModalTitle('Error');
+      setModalMessage('No se encontró información del negocio');
+      setShowErrorModal(true);
       return;
     }
 
@@ -417,13 +437,17 @@ export default function CartView({ onNavigateToTab }) {
               // Obtener el WhatsApp del negocio específico
               const { data: { user } } = await supabase.auth.getUser();
               if (!user) {
-                Alert.alert('Error', 'No se pudo obtener información del usuario');
+                setModalTitle('Error');
+                setModalMessage('No se pudo obtener información del usuario');
+                setShowErrorModal(true);
                 return;
               }
 
               // Verificar que el negocio tenga WhatsApp configurado
               if (!business.negocio?.whatsapp) {
-                Alert.alert('Error', 'Este negocio no tiene WhatsApp configurado');
+                setModalTitle('Error');
+                setModalMessage('Este negocio no tiene WhatsApp configurado');
+                setShowErrorModal(true);
                 return;
               }
 
@@ -454,7 +478,9 @@ export default function CartView({ onNavigateToTab }) {
 
               if (orderError) {
                 console.error('Error al registrar pedido:', orderError);
-                Alert.alert('Error', 'No se pudo registrar el pedido. Inténtalo de nuevo.');
+                setModalTitle('Error');
+                setModalMessage('No se pudo registrar el pedido. Inténtalo de nuevo.');
+                setShowErrorModal(true);
                 return;
               }
 
@@ -491,7 +517,9 @@ export default function CartView({ onNavigateToTab }) {
               openWhatsAppAndDeleteCart(whatsappUrl, user.id, businessId, orderData.id);
             } catch (error) {
               console.error('Error al procesar pedido:', error);
-              Alert.alert('Error', 'No se pudo procesar el pedido. Inténtalo de nuevo.');
+              setModalTitle('Error');
+              setModalMessage('No se pudo procesar el pedido. Inténtalo de nuevo.');
+              setShowErrorModal(true);
             }
           },
         },
@@ -842,6 +870,52 @@ export default function CartView({ onNavigateToTab }) {
                 Continuar
               </Button>
             </View>
+          </View>
+        </Card>
+      </Modal>
+
+      {/* Modal de Éxito */}
+      <Modal
+        visible={showSuccessModal}
+        backdropStyle={styles.modalBackdrop}
+        onBackdropPress={() => setShowSuccessModal(false)}
+      >
+        <Card disabled style={styles.modalCard}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalIconContainer}>
+              <CheckIcon style={styles.modalIcon} fill={colors.success} />
+            </View>
+            <RNText style={styles.modalTitle}>{modalTitle}</RNText>
+            <RNText style={styles.modalMessage}>{modalMessage}</RNText>
+            <Button
+              style={styles.modalButton}
+              onPress={() => setShowSuccessModal(false)}
+            >
+              Entendido
+            </Button>
+          </View>
+        </Card>
+      </Modal>
+
+      {/* Modal de Error */}
+      <Modal
+        visible={showErrorModal}
+        backdropStyle={styles.modalBackdrop}
+        onBackdropPress={() => setShowErrorModal(false)}
+      >
+        <Card disabled style={styles.modalCard}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalIconContainer}>
+              <AlertIcon style={styles.modalIcon} fill={colors.danger} />
+            </View>
+            <RNText style={styles.modalTitle}>{modalTitle}</RNText>
+            <RNText style={styles.modalMessage}>{modalMessage}</RNText>
+            <Button
+              style={[styles.modalButton, styles.errorButton]}
+              onPress={() => setShowErrorModal(false)}
+            >
+              Entendido
+            </Button>
           </View>
         </Card>
       </Modal>
@@ -1348,5 +1422,63 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: colors.secondary,
     textAlign: 'center',
+  },
+  modalBackdrop: {
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+  },
+  modalCard: {
+    margin: 20,
+    borderRadius: 20,
+    backgroundColor: colors.white,
+    shadowColor: colors.primary,
+    shadowOffset: {
+      width: 0,
+      height: 8,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 24,
+    elevation: 12,
+  },
+  modalContent: {
+    padding: 30,
+    alignItems: 'center',
+  },
+  modalIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: colors.lightGray + '30',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalIcon: {
+    width: 40,
+    height: 40,
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: colors.primary,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  modalMessage: {
+    fontSize: 16,
+    color: colors.gray,
+    textAlign: 'center',
+    lineHeight: 24,
+    marginBottom: 24,
+  },
+  modalButton: {
+    backgroundColor: colors.success,
+    borderColor: colors.success,
+    borderRadius: 12,
+    height: 48,
+    minWidth: 120,
+  },
+  errorButton: {
+    backgroundColor: colors.danger,
+    borderColor: colors.danger,
   },
 });

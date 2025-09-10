@@ -5,6 +5,8 @@ import { supabase } from '../lib/supabase';
 import colors from '../lib/colors';
 import CartView from './CartView';
 import OrderManagementView from './OrderManagementView';
+import SocialFeedView from './SocialFeedView';
+import CreatePostView from './CreatePostView';
 
 export default function MainFeedView({ userProfile, onNavigateToBusiness, onLogout }) {
   const [publications, setPublications] = useState([]);
@@ -13,11 +15,15 @@ export default function MainFeedView({ userProfile, onNavigateToBusiness, onLogo
   const [selectedCategory, setSelectedCategory] = useState('Todos');
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [socialSearchQuery, setSocialSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('inicio');
   
   // Estados para gestión de pedidos
   const [userBusinessId, setUserBusinessId] = useState(null);
   const [loadingBusiness, setLoadingBusiness] = useState(true);
+  
+  // Estados para navegación
+  const [currentView, setCurrentView] = useState('main'); // 'main' o 'createPost'
   
   const { width: screenWidth } = Dimensions.get('window');
   
@@ -40,6 +46,13 @@ export default function MainFeedView({ userProfile, onNavigateToBusiness, onLogo
       loadBusinesses();
     }
   }, [selectedCategory]);
+
+  // Recargar publicaciones cuando cambie la búsqueda social
+  useEffect(() => {
+    if (activeTab === 'inicio') {
+      loadPublications();
+    }
+  }, [socialSearchQuery]);
 
   // Cargar el negocio del usuario actual si es dueño de negocio
   useEffect(() => {
@@ -124,6 +137,7 @@ export default function MainFeedView({ userProfile, onNavigateToBusiness, onLogo
   const EditIcon = (props) => <Icon {...props} name='edit'/>;
   const PlusIcon = (props) => <Icon {...props} name='plus'/>;
   const SettingsIcon = (props) => <Icon {...props} name='settings'/>;
+  const CreateIcon = (props) => <Icon {...props} name='plus'/>;
 
 
 
@@ -132,20 +146,12 @@ export default function MainFeedView({ userProfile, onNavigateToBusiness, onLogo
     try {
       setLoading(true);
       let query = supabase
-        .from('publicaciones')
-        .select(`
-          *,
-          negocios (
-            id,
-            nombre,
-            categoria,
-            logo_url
-          )
-        `)
-        .order('created_at', { ascending: false });
+        .from('vista_publicaciones_completa')
+        .select('*')
+        .order('fecha_publicacion', { ascending: false });
 
       if (selectedCategory !== 'Todos') {
-        query = query.eq('negocios.categoria', selectedCategory);
+        query = query.eq('categoria_negocio', selectedCategory);
       }
 
       const { data, error } = await query;
@@ -156,7 +162,17 @@ export default function MainFeedView({ userProfile, onNavigateToBusiness, onLogo
         return;
       }
 
-      setPublications(data || []);
+      // Filtrar por búsqueda de texto si existe
+      let filteredData = data || [];
+      if (socialSearchQuery.trim() !== '') {
+        filteredData = filteredData.filter(publication => 
+          publication.contenido?.toLowerCase().includes(socialSearchQuery.toLowerCase()) ||
+          publication.nombre_negocio?.toLowerCase().includes(socialSearchQuery.toLowerCase()) ||
+          publication.categoria_negocio?.toLowerCase().includes(socialSearchQuery.toLowerCase())
+        );
+      }
+
+      setPublications(filteredData);
     } catch (error) {
       console.error('Error general:', error);
       setPublications([]);
@@ -290,9 +306,9 @@ export default function MainFeedView({ userProfile, onNavigateToBusiness, onLogo
       <View style={styles.publicationHeader}>
         <View style={styles.businessInfo}>
           <View style={styles.businessLogoContainer}>
-            {publication.negocios?.logo_url ? (
+            {publication.logo_negocio ? (
               <Image 
-                source={{ uri: publication.negocios.logo_url }} 
+                source={{ uri: publication.logo_negocio }} 
                 style={styles.businessLogo}
               />
             ) : (
@@ -304,13 +320,13 @@ export default function MainFeedView({ userProfile, onNavigateToBusiness, onLogo
           
           <View style={styles.businessDetails}>
             <Text style={styles.businessName}>
-              {publication.negocios?.nombre || 'Negocio'}
+              {publication.nombre_negocio || 'Negocio'}
             </Text>
             <Text style={styles.businessCategory}>
-              {publication.negocios?.categoria || 'Categoría'}
+              {publication.categoria_negocio || 'Categoría'}
             </Text>
             <Text style={styles.publicationTime}>
-              Hace {getTimeAgo(publication.created_at)}
+              Hace {getTimeAgo(publication.fecha_publicacion)}
             </Text>
           </View>
         </View>
@@ -361,6 +377,30 @@ export default function MainFeedView({ userProfile, onNavigateToBusiness, onLogo
     return `${diffInDays} días`;
   };
 
+  // Manejar creación de publicación
+  const handleCreatePost = () => {
+    if (userProfile?.rol === 'negocio') {
+      setCurrentView('createPost');
+    }
+  };
+
+  // Navegar a crear publicación
+  const handleOpenCreatePost = () => {
+    setCurrentView('createPost');
+  };
+
+  // Cerrar vista de crear publicación
+  const handleCloseCreatePost = () => {
+    setCurrentView('main');
+  };
+
+  // Manejar publicación creada
+  const handlePostCreated = () => {
+    setCurrentView('main');
+    // Recargar publicaciones
+    loadPublications();
+  };
+
   // Navegar a gestión de negocio (solo para usuarios negocio)
   const handleBusinessManagement = async () => {
     console.log('handleBusinessManagement llamado');
@@ -408,10 +448,10 @@ export default function MainFeedView({ userProfile, onNavigateToBusiness, onLogo
     }
   };
 
-  // Renderizar vista de inicio (feed)
+  // Renderizar vista de inicio (feed social)
   const renderInicioView = () => (
     <>
-      {/* TopNavigation mejorado y más atractivo */}
+      {/* Header original para feed social */}
       <View style={styles.enhancedHeader}>
         <View style={styles.headerBackground}>
           <View style={styles.headerGradient} />
@@ -423,94 +463,90 @@ export default function MainFeedView({ userProfile, onNavigateToBusiness, onLogo
               <HomeIcon style={styles.appLogoIcon} fill={colors.secondary} />
             </View>
             <View style={styles.appTitleContainer}>
-              <Text style={styles.appTitle}>VeciMarket</Text>
-              <Text style={styles.appSubtitle}>Descubre negocios locales</Text>
+              <Text style={styles.appTitle}>Feed Social</Text>
+              <Text style={styles.appSubtitle}>Descubre lo que comparten los negocios</Text>
             </View>
           </View>
-          
-          <TouchableOpacity style={styles.notificationButton}>
-            <BellIcon style={styles.notificationIcon} fill={colors.white} />
-            <View style={styles.notificationBadge}>
-              <Text style={styles.notificationBadgeText}>90</Text>
-            </View>
-          </TouchableOpacity>
         </View>
       </View>
-      
-      {/* Barra de búsqueda */}
-      <View style={styles.searchContainer}>
-        <SearchIcon style={styles.searchIcon} fill={colors.primary} />
-        <Input
-          placeholder="Buscar negocios o productos"
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          style={styles.searchInput}
-          size="large"
-        />
-      </View>
-      
-      {/* Filtros de categoría */}
-      <ScrollView 
-        horizontal 
-        showsHorizontalScrollIndicator={false}
-        style={styles.categoriesContainer}
-        contentContainerStyle={styles.categoriesContent}
-      >
-        {CATEGORIAS.map((categoria) => (
-          <TouchableOpacity
-            key={categoria}
-            style={[
-              styles.categoryButton,
-              selectedCategory === categoria && styles.categoryButtonActive
-            ]}
-            onPress={() => setSelectedCategory(categoria)}
-            activeOpacity={0.7}
-          >
-            <Text style={[
-              styles.categoryButtonText,
-              selectedCategory === categoria && styles.categoryButtonTextActive
-            ]}>
-              {categoria}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
 
-      {/* Contenido principal */}
+      {/* Contenido del feed social */}
       <ScrollView 
         style={styles.content}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.contentContainer}
       >
-        {/* Sección de publicaciones recientes */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Publicaciones Recientes</Text>
-          <TouchableOpacity>
-            <Text style={styles.seeAllText}>Ver todas</Text>
-          </TouchableOpacity>
+        {/* Buscador */}
+        <View style={styles.searchContainer}>
+          <Input
+            placeholder="Buscar publicaciones..."
+            value={socialSearchQuery}
+            onChangeText={setSocialSearchQuery}
+            accessoryLeft={SearchIcon}
+            style={styles.searchInput}
+            textStyle={styles.searchInputText}
+          />
+        </View>
+
+        {/* Filtros de categoría */}
+        <View style={styles.categoryFiltersContainer}>
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.categoryFiltersScroll}
+          >
+            {CATEGORIAS.map((category) => (
+              <TouchableOpacity
+                key={category}
+                style={[
+                  styles.categoryFilterChip,
+                  selectedCategory === category && styles.categoryFilterChipActive
+                ]}
+                onPress={() => setSelectedCategory(category)}
+              >
+                <Text style={[
+                  styles.categoryFilterText,
+                  selectedCategory === category && styles.categoryFilterTextActive
+                ]}>
+                  {category}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
         </View>
 
         {/* Lista de publicaciones */}
         {loading ? (
           <View style={styles.loadingState}>
             <View style={styles.loadingSpinner}>
-              <Text style={styles.loadingSpinnerText}>⏳</Text>
+              <Text style={styles.loadingSpinnerText}>📱</Text>
             </View>
             <Text style={styles.loadingText}>Cargando publicaciones...</Text>
-            <Text style={styles.loadingSubtext}>Por favor espera un momento</Text>
+            <Text style={styles.loadingSubtext}>Descubre lo que comparten los negocios</Text>
           </View>
         ) : publications.length > 0 ? (
-          publications.map(renderPublication)
+          publications.map((publication) => renderPublication(publication))
         ) : (
           <View style={styles.emptyState}>
-            <Text style={styles.emptyStateIcon}>📝</Text>
+            <Text style={styles.emptyStateIcon}>📢</Text>
             <Text style={styles.emptyStateText}>No hay publicaciones aún</Text>
             <Text style={styles.emptyStateSubtext}>
-              Los negocios aparecerán aquí cuando publiquen contenido
+              Los negocios aparecerán aquí cuando compartan contenido
             </Text>
           </View>
         )}
       </ScrollView>
+
+      {/* FAB para crear publicación - Solo para dueños de negocio */}
+      {userProfile?.rol === 'negocio' && (
+        <TouchableOpacity
+          style={styles.fab}
+          onPress={handleCreatePost}
+          activeOpacity={0.8}
+        >
+          <CreateIcon style={styles.fabIcon} fill={colors.white} />
+        </TouchableOpacity>
+      )}
     </>
   );
 
@@ -951,12 +987,19 @@ export default function MainFeedView({ userProfile, onNavigateToBusiness, onLogo
             </View>
             
             <View style={styles.actionButtonsRow}>
-              <TouchableOpacity style={styles.mainActionButton}>
+              <TouchableOpacity 
+                style={styles.mainActionButton}
+                onPress={() => setActiveTab('social')}
+                activeOpacity={0.7}
+              >
                 <View style={styles.mainActionIcon}>
                   <Text style={styles.mainActionEmoji}>📢</Text>
                 </View>
                 <Text style={styles.mainActionTitle}>Crear Publicación</Text>
                 <Text style={styles.mainActionSubtitle}>Promociona tu negocio</Text>
+                <View style={styles.actionButtonIndicator}>
+                  <Text style={styles.actionButtonIndicatorText}>👆 Toca aquí</Text>
+                </View>
               </TouchableOpacity>
               
               <TouchableOpacity style={styles.mainActionButton}>
@@ -987,13 +1030,25 @@ export default function MainFeedView({ userProfile, onNavigateToBusiness, onLogo
   const renderContent = () => {
     switch (activeTab) {
       case 'inicio':
-        return renderInicioView();
+        return (
+          <SocialFeedView 
+            userProfile={userProfile} 
+            onNavigateToBusiness={onNavigateToBusiness}
+          />
+        );
       case 'negocios':
         return renderNegociosView();
       case 'negocio':
         return renderNegocioView();
       case 'pedidos':
         return renderPedidosView();
+      case 'social':
+        return (
+          <SocialFeedView 
+            userProfile={userProfile} 
+            onNavigateToBusiness={onNavigateToBusiness}
+          />
+        );
       case 'favoritos':
         return renderFavoritosView();
       case 'carrito':
@@ -1001,16 +1056,33 @@ export default function MainFeedView({ userProfile, onNavigateToBusiness, onLogo
       case 'perfil':
         return renderPerfilView();
       default:
-        return renderInicioView();
+        return (
+          <SocialFeedView 
+            userProfile={userProfile} 
+            onNavigateToBusiness={onNavigateToBusiness}
+          />
+        );
     }
   };
 
-  return (
-    <Layout style={styles.container}>
-      {renderContent()}
+  // Renderizar vista actual
+  const renderCurrentView = () => {
+    if (currentView === 'createPost') {
+      return (
+        <CreatePostView
+          userProfile={userProfile}
+          onClose={handleCloseCreatePost}
+          onPostCreated={handlePostCreated}
+        />
+      );
+    }
+    
+    return (
+      <Layout style={styles.container}>
+        {renderContent()}
 
-      {/* Barra de navegación inferior */}
-      <View style={styles.bottomNavigation}>
+        {/* Barra de navegación inferior */}
+        <View style={styles.bottomNavigation}>
         <TouchableOpacity 
           style={[styles.navItem, activeTab === 'inicio' && styles.navItemActive]}
           onPress={() => setActiveTab('inicio')}
@@ -1094,7 +1166,10 @@ export default function MainFeedView({ userProfile, onNavigateToBusiness, onLogo
         </TouchableOpacity>
       </View>
     </Layout>
-  );
+    );
+  };
+
+  return renderCurrentView();
 }
 
 const styles = StyleSheet.create({
@@ -1960,5 +2035,28 @@ const styles = StyleSheet.create({
     color: colors.primary,
     textAlign: 'center',
     lineHeight: 24,
+  },
+  // Estilos para FAB (Floating Action Button)
+  fab: {
+    position: 'absolute',
+    bottom: 100, // Por encima de la barra de navegación
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: colors.secondary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+    borderWidth: 2,
+    borderColor: colors.white,
+  },
+  fabIcon: {
+    width: 24,
+    height: 24,
   },
 });
