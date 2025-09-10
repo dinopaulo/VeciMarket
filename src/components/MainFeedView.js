@@ -7,6 +7,7 @@ import CartView from './CartView';
 import OrderManagementView from './OrderManagementView';
 import SocialFeedView from './SocialFeedView';
 import CreatePostView from './CreatePostView';
+import FavoritesView from './FavoritesView';
 
 export default function MainFeedView({ userProfile, onNavigateToBusiness, onLogout }) {
   const [publications, setPublications] = useState([]);
@@ -463,7 +464,7 @@ export default function MainFeedView({ userProfile, onNavigateToBusiness, onLogo
               <HomeIcon style={styles.appLogoIcon} fill={colors.secondary} />
             </View>
             <View style={styles.appTitleContainer}>
-              <Text style={styles.appTitle}>Feed Social</Text>
+              <Text style={styles.appTitle}>Muro Social</Text>
               <Text style={styles.appSubtitle}>Descubre lo que comparten los negocios</Text>
             </View>
           </View>
@@ -741,39 +742,7 @@ export default function MainFeedView({ userProfile, onNavigateToBusiness, onLogo
 
   // Renderizar vista de favoritos
   const renderFavoritosView = () => (
-    <>
-      <View style={styles.enhancedHeader}>
-        <View style={styles.headerBackground}>
-          <View style={styles.headerGradient} />
-        </View>
-        
-        <View style={styles.headerContent}>
-          <View style={styles.headerLeft}>
-            <View style={styles.appLogoContainer}>
-              <HeartIcon style={styles.appLogoIcon} fill={colors.secondary} />
-            </View>
-            <View style={styles.appTitleContainer}>
-              <Text style={styles.appTitle}>Favoritos</Text>
-              <Text style={styles.appSubtitle}>Tus productos preferidos</Text>
-            </View>
-          </View>
-        </View>
-      </View>
-      
-      <ScrollView 
-        style={styles.content}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.contentContainer}
-      >
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyStateIcon}>❤️</Text>
-          <Text style={styles.emptyStateText}>No tienes favoritos aún</Text>
-          <Text style={styles.emptyStateSubtext}>
-            Los productos y negocios que marques como favoritos aparecerán aquí
-          </Text>
-        </View>
-      </ScrollView>
-    </>
+    <FavoritesView />
   );
 
   // Renderizar vista de carrito

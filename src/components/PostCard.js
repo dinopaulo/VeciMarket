@@ -1,17 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, TouchableOpacity, Image, Text, Alert, Dimensions } from 'react-native';
-import { Button, Icon, Modal } from '@ui-kitten/components';
+import { Button, Icon, Modal, Card, Divider } from '@ui-kitten/components';
 import { supabase } from '../lib/supabase';
 import colors from '../lib/colors';
 import CommentsModal from './CommentsModal';
 
-export default function PostCard({ post, userProfile, onPostUpdated }) {
+export default function PostCard({ post, userProfile, onPostUpdated, onNavigateToProduct }) {
   const [isLiked, setIsLiked] = useState(false);
   const [isFavorited, setIsFavorited] = useState(false);
   const [likesCount, setLikesCount] = useState(0);
   const [commentsCount, setCommentsCount] = useState(0);
   const [sharesCount, setSharesCount] = useState(0);
   const [showComments, setShowComments] = useState(false);
+  const [showDevelopmentModal, setShowDevelopmentModal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
 
@@ -20,13 +21,16 @@ export default function PostCard({ post, userProfile, onPostUpdated }) {
   // Iconos
   const HeartIcon = (props) => <Icon {...props} name='heart'/>;
   const HeartFillIcon = (props) => <Icon {...props} name='heart'/>;
+  const HeartOutlineIcon = (props) => <Icon {...props} name='heart-outline'/>;
   const MessageIcon = (props) => <Icon {...props} name='message-circle'/>;
   const ShareIcon = (props) => <Icon {...props} name='share'/>;
-  const BookmarkIcon = (props) => <Icon {...props} name='bookmark'/>;
-  const BookmarkFillIcon = (props) => <Icon {...props} name='bookmark'/>;
   const PackageIcon = (props) => <Icon {...props} name='cube'/>;
   const ChevronLeftIcon = (props) => <Icon {...props} name='chevron-left'/>;
   const ChevronRightIcon = (props) => <Icon {...props} name='chevron-right'/>;
+  const CodeIcon = (props) => <Icon {...props} name='code'/>;
+  const ClockIcon = (props) => <Icon {...props} name='clock'/>;
+  const CheckmarkIcon = (props) => <Icon {...props} name='checkmark'/>;
+  const CloseIcon = (props) => <Icon {...props} name='close'/>;
 
   useEffect(() => {
     console.log('=== POSTCARD DEBUG ===');
@@ -58,6 +62,13 @@ export default function PostCard({ post, userProfile, onPostUpdated }) {
         supabase.from('publicaciones_favoritas').select('*').eq('publicacion_id', post.id).eq('usuario_id', user.id).single()
       ]);
 
+      // Verificar errores
+      if (likesResult.error) console.error('Error al cargar likes:', likesResult.error);
+      if (commentsResult.error) console.error('Error al cargar comentarios:', commentsResult.error);
+      if (sharesResult.error) console.error('Error al cargar shares:', sharesResult.error);
+      if (userLikeResult.error && userLikeResult.error.code !== 'PGRST116') console.error('Error al cargar like del usuario:', userLikeResult.error);
+      if (userFavoriteResult.error && userFavoriteResult.error.code !== 'PGRST116') console.error('Error al cargar favorito del usuario:', userFavoriteResult.error);
+
       setLikesCount(likesResult.count || 0);
       setCommentsCount(commentsResult.count || 0);
       setSharesCount(sharesResult.count || 0);
@@ -75,7 +86,10 @@ export default function PostCard({ post, userProfile, onPostUpdated }) {
     setLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) {
+        Alert.alert('Error', 'Debes iniciar sesión para dar me gusta');
+        return;
+      }
 
       if (isLiked) {
         // Quitar like
@@ -85,10 +99,14 @@ export default function PostCard({ post, userProfile, onPostUpdated }) {
           .eq('publicacion_id', post.id)
           .eq('usuario_id', user.id);
 
-        if (!error) {
-          setIsLiked(false);
-          setLikesCount(prev => Math.max(0, prev - 1));
+        if (error) {
+          console.error('Error al quitar like:', error);
+          Alert.alert('Error', 'No se pudo quitar el me gusta');
+          return;
         }
+
+        setIsLiked(false);
+        setLikesCount(prev => Math.max(0, prev - 1));
       } else {
         // Dar like
         const { error } = await supabase
@@ -98,13 +116,18 @@ export default function PostCard({ post, userProfile, onPostUpdated }) {
             usuario_id: user.id
           });
 
-        if (!error) {
-          setIsLiked(true);
-          setLikesCount(prev => prev + 1);
+        if (error) {
+          console.error('Error al dar like:', error);
+          Alert.alert('Error', 'No se pudo dar me gusta');
+          return;
         }
+
+        setIsLiked(true);
+        setLikesCount(prev => prev + 1);
       }
     } catch (error) {
       console.error('Error al toggle like:', error);
+      Alert.alert('Error', 'Ocurrió un error inesperado');
     } finally {
       setLoading(false);
     }
@@ -150,28 +173,37 @@ export default function PostCard({ post, userProfile, onPostUpdated }) {
     }
   };
 
-  // Compartir publicación
-  const sharePost = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+  // Mostrar modal de funcionalidad en desarrollo
+  const sharePost = () => {
+    setShowDevelopmentModal(true);
+  };
 
-      // Registrar el compartir
-      const { error } = await supabase
-        .from('compartir_publicaciones')
-        .insert({
-          publicacion_id: post.id,
-          usuario_id: user.id,
-          canal_compartir: 'app'
-        });
-
-      if (!error) {
-        setSharesCount(prev => prev + 1);
-        Alert.alert('Compartido', 'La publicación ha sido compartida');
-      }
-    } catch (error) {
-      console.error('Error al compartir:', error);
-    }
+  // Navegar al detalle del producto
+  const handleProductPress = () => {
+    if (!onNavigateToProduct || !post.nombre_producto) return;
+    
+    // Crear objeto producto con la estructura esperada por ProductDetailView
+    const productData = {
+      id: post.producto_id || post.id, // Usar producto_id si existe, sino el post.id
+      nombre: post.nombre_producto,
+      descripcion: post.descripcion_producto,
+      valor: post.precio_producto,
+      precio: post.precio_producto,
+      tipo_producto: post.tipo_producto || 'Producto',
+      categoria: post.categoria_producto,
+      stock: post.stock_producto,
+      disponibilidad: post.disponibilidad_producto || 'disponible',
+      imagen_url: post.imagen_producto,
+      negocio_id: post.negocio_id,
+      negocio_whatsapp: post.whatsapp_negocio,
+      created_at: post.fecha_publicacion,
+      updated_at: post.fecha_publicacion,
+      descuento: post.descuento_producto || 0,
+      precio_especial: post.precio_especial_producto,
+      es_promocion: post.es_promocion_producto || false
+    };
+    
+    onNavigateToProduct(productData);
   };
 
   // Obtener tiempo transcurrido
@@ -247,7 +279,11 @@ export default function PostCard({ post, userProfile, onPostUpdated }) {
     if (!post.nombre_producto) return null;
 
     return (
-      <TouchableOpacity style={styles.productInfo}>
+      <TouchableOpacity 
+        style={styles.productInfo}
+        onPress={handleProductPress}
+        activeOpacity={0.8}
+      >
         <View style={styles.productIconContainer}>
           <PackageIcon style={styles.productIcon} fill={colors.white} />
         </View>
@@ -297,9 +333,9 @@ export default function PostCard({ post, userProfile, onPostUpdated }) {
         
         <TouchableOpacity style={styles.favoriteButton} onPress={toggleFavorite}>
           {isFavorited ? (
-            <BookmarkFillIcon style={styles.favoriteIcon} fill={colors.secondary} />
+            <HeartFillIcon style={styles.favoriteIcon} fill={colors.danger} />
           ) : (
-            <BookmarkIcon style={styles.favoriteIcon} fill={colors.primary} />
+            <HeartOutlineIcon style={styles.favoriteIcon} fill={colors.primary} />
           )}
         </TouchableOpacity>
       </View>
@@ -367,6 +403,70 @@ export default function PostCard({ post, userProfile, onPostUpdated }) {
           onPostUpdated && onPostUpdated();
         }}
       />
+
+      {/* Modal de funcionalidad en desarrollo */}
+      <Modal
+        visible={showDevelopmentModal}
+        backdropStyle={styles.modalBackdrop}
+        onBackdropPress={() => setShowDevelopmentModal(false)}
+      >
+        <Card style={styles.developmentModal}>
+          <View style={styles.developmentHeader}>
+            <View style={styles.developmentIconContainer}>
+              <CodeIcon style={styles.developmentIcon} fill={colors.secondary} />
+            </View>
+            <TouchableOpacity 
+              style={styles.closeButton}
+              onPress={() => setShowDevelopmentModal(false)}
+            >
+              <CloseIcon style={styles.closeIcon} fill={colors.primary} />
+            </TouchableOpacity>
+          </View>
+          
+          <View style={styles.developmentContent}>
+            <Text style={styles.developmentTitle}>Funcionalidad en Desarrollo</Text>
+            <Text style={styles.developmentSubtitle}>
+              Estamos trabajando en esta característica
+            </Text>
+            
+            <View style={styles.developmentFeatures}>
+              <View style={styles.featureItem}>
+                <CheckmarkIcon style={styles.featureIcon} fill={colors.success} />
+                <Text style={styles.featureText}>Compartir en redes sociales</Text>
+              </View>
+              <View style={styles.featureItem}>
+                <CheckmarkIcon style={styles.featureIcon} fill={colors.success} />
+                <Text style={styles.featureText}>Enviar por mensaje</Text>
+              </View>
+              <View style={styles.featureItem}>
+                <CheckmarkIcon style={styles.featureIcon} fill={colors.success} />
+                <Text style={styles.featureText}>Copiar enlace</Text>
+              </View>
+              <View style={styles.featureItem}>
+                <ClockIcon style={styles.featureIcon} fill={colors.warning} />
+                <Text style={styles.featureText}>Compartir con contactos</Text>
+              </View>
+            </View>
+            
+            <Divider style={styles.divider} />
+            
+            <View style={styles.developmentFooter}>
+              <ClockIcon style={styles.clockIcon} fill={colors.primary} />
+              <Text style={styles.developmentFooterText}>
+                Próximamente disponible
+              </Text>
+            </View>
+          </View>
+          
+          <Button
+            style={styles.developmentButton}
+            status="primary"
+            onPress={() => setShowDevelopmentModal(false)}
+          >
+            Entendido
+          </Button>
+        </Card>
+      </Modal>
     </View>
   );
 }
@@ -610,5 +710,104 @@ const styles = StyleSheet.create({
   },
   actionTextActive: {
     color: colors.danger,
+  },
+  // Estilos del modal de desarrollo
+  modalBackdrop: {
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  developmentModal: {
+    margin: 20,
+    borderRadius: 16,
+    padding: 0,
+    maxWidth: 400,
+    alignSelf: 'center',
+  },
+  developmentHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 16,
+  },
+  developmentIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.lightGray,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  developmentIcon: {
+    width: 24,
+    height: 24,
+  },
+  closeButton: {
+    padding: 8,
+  },
+  closeIcon: {
+    width: 20,
+    height: 20,
+  },
+  developmentContent: {
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+  },
+  developmentTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: colors.primary,
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  developmentSubtitle: {
+    fontSize: 14,
+    color: colors.primary,
+    opacity: 0.7,
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  developmentFeatures: {
+    marginBottom: 20,
+  },
+  featureItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  featureIcon: {
+    width: 16,
+    height: 16,
+    marginRight: 12,
+  },
+  featureText: {
+    fontSize: 14,
+    color: colors.primary,
+    flex: 1,
+  },
+  divider: {
+    marginVertical: 16,
+    backgroundColor: colors.lightGray,
+  },
+  developmentFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  clockIcon: {
+    width: 16,
+    height: 16,
+    marginRight: 8,
+  },
+  developmentFooterText: {
+    fontSize: 14,
+    color: colors.primary,
+    fontWeight: '500',
+  },
+  developmentButton: {
+    marginHorizontal: 20,
+    marginBottom: 20,
+    borderRadius: 25,
   },
 });

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Image, TextInput, Animated, Dimensions, SafeAreaView } from 'react-native';
-import { Button, Card, Layout } from '@ui-kitten/components';
+import { Button, Card, Layout, Modal, Text as KittenText } from '@ui-kitten/components';
 import { supabase } from '../lib/supabase';
 import colors from '../lib/colors';
 import * as ImagePicker from 'expo-image-picker';
@@ -17,6 +17,7 @@ export default function CreatePostView({ userProfile, onClose, onPostCreated }) 
   const [productos, setProductos] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showProductModal, setShowProductModal] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [negocioId, setNegocioId] = useState(null);
   const [fadeAnim] = useState(new Animated.Value(0));
   const [slideAnim] = useState(new Animated.Value(50));
@@ -85,10 +86,6 @@ export default function CreatePostView({ userProfile, onClose, onPostCreated }) 
           } else {
             console.log(`✅ Acceso exitoso a "${bucketName}". Archivos:`, files);
             // Si podemos acceder directamente, usar este bucket
-            Alert.alert(
-              'Bucket Encontrado', 
-              `Se encontró acceso directo al bucket "${bucketName}". La aplicación funcionará correctamente.`
-            );
             return;
           }
         } catch (bucketError) {
@@ -325,34 +322,6 @@ export default function CreatePostView({ userProfile, onClose, onPostCreated }) 
     }
   };
 
-  // Función de prueba para verificar fotos
-  const testPhotoUpload = async () => {
-    console.log('=== PRUEBA DE SUBIDA DE FOTOS ===');
-    console.log('Fotos seleccionadas:', fotos);
-    
-    if (fotos.length === 0) {
-      Alert.alert('Sin fotos', 'No hay fotos seleccionadas para probar');
-      return;
-    }
-
-    try {
-      const testPhoto = fotos[0];
-      console.log('Probando subida de foto:', testPhoto);
-      
-      const publicUrl = await uploadPhoto(testPhoto.uri, 'test_' + Date.now(), 1);
-      
-      if (publicUrl) {
-        console.log('✅ Foto subida exitosamente:', publicUrl);
-        Alert.alert('Éxito', `Foto subida correctamente:\n${publicUrl}`);
-      } else {
-        console.log('❌ Error al subir foto');
-        Alert.alert('Error', 'No se pudo subir la foto');
-      }
-    } catch (error) {
-      console.error('Error en prueba:', error);
-      Alert.alert('Error', 'Error al probar subida de foto');
-    }
-  };
 
   // Crear publicación
   const createPost = async () => {
@@ -440,15 +409,7 @@ export default function CreatePostView({ userProfile, onClose, onPostCreated }) 
         }
       }
 
-      Alert.alert('Éxito', 'Publicación creada correctamente', [
-        {
-          text: 'OK',
-          onPress: () => {
-            onPostCreated && onPostCreated();
-            onClose && onClose();
-          }
-        }
-      ]);
+      setShowSuccessModal(true);
 
     } catch (error) {
       console.error('Error general:', error);
@@ -456,6 +417,12 @@ export default function CreatePostView({ userProfile, onClose, onPostCreated }) 
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSuccessModalClose = () => {
+    setShowSuccessModal(false);
+    onPostCreated && onPostCreated();
+    onClose && onClose();
   };
 
   return (
@@ -486,7 +453,13 @@ export default function CreatePostView({ userProfile, onClose, onPostCreated }) 
           <View style={styles.placeholder} />
         </LinearGradient>
 
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        <ScrollView 
+          style={styles.content} 
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+          bounces={true}
+          keyboardShouldPersistTaps="handled"
+        >
           {/* Indicador de progreso moderno */}
           <View style={styles.progressContainer}>
             <View style={styles.progressHeader}>
@@ -633,42 +606,30 @@ export default function CreatePostView({ userProfile, onClose, onPostCreated }) 
             </ScrollView>
           </View>
 
-          {/* Botón de prueba temporal */}
-          {fotos.length > 0 && (
-            <TouchableOpacity
-              style={[styles.createButton, { backgroundColor: colors.danger, marginBottom: 10 }]}
-              onPress={testPhotoUpload}
-            >
-              <Text style={styles.createButtonText}>🧪 Probar Subida de Foto</Text>
-            </TouchableOpacity>
-          )}
 
           {/* Botón crear */}
-          <TouchableOpacity
-            style={[
-              styles.createButton,
-              (!contenido.trim() || loading) && styles.createButtonDisabled
-            ]}
-            onPress={createPost}
-            disabled={loading || !contenido.trim()}
-          >
-            <LinearGradient
-              colors={(!contenido.trim() || loading) ? ['#9CA3AF', '#6B7280'] : [colors.primary, colors.secondary]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.createButtonGradient}
+          <View style={styles.buttonContainer}>
+            <TouchableOpacity
+              style={[
+                styles.createButton,
+                (!contenido.trim() || loading) && styles.createButtonDisabled
+              ]}
+              onPress={createPost}
+              disabled={loading || !contenido.trim()}
+              activeOpacity={0.8}
             >
-              <Ionicons 
-                name={loading ? "cloud-upload-outline" : "rocket-outline"} 
-                size={20} 
-                color="white" 
-                style={styles.createButtonIcon}
-              />
-              <Text style={styles.createButtonText}>
-                {loading ? 'Publicando...' : 'Crear Publicación'}
-              </Text>
-            </LinearGradient>
-          </TouchableOpacity>
+              <LinearGradient
+                colors={(!contenido.trim() || loading) ? ['#9CA3AF', '#6B7280'] : [colors.primary, colors.secondary]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.createButtonGradient}
+              >
+                <Text style={styles.createButtonText}>
+                  {loading ? 'Publicando...' : 'Crear Publicación'}
+                </Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
         </ScrollView>
       </Animated.View>
 
@@ -731,6 +692,32 @@ export default function CreatePostView({ userProfile, onClose, onPostCreated }) 
           </View>
         </View>
       )}
+
+      {/* Modal de éxito */}
+      <Modal
+        visible={showSuccessModal}
+        backdropStyle={styles.modalBackdrop}
+        onBackdropPress={handleSuccessModalClose}
+      >
+        <Card style={styles.successModal}>
+          <View style={styles.successContent}>
+            <View style={styles.successIconContainer}>
+              <Ionicons name="checkmark-circle" size={60} color={colors.success} />
+            </View>
+            <KittenText style={styles.successTitle}>¡Éxito!</KittenText>
+            <KittenText style={styles.successMessage}>
+              Publicación creada correctamente
+            </KittenText>
+            <Button
+              style={styles.successButton}
+              status="primary"
+              onPress={handleSuccessModalClose}
+            >
+              Continuar
+            </Button>
+          </View>
+        </Card>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -798,6 +785,10 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 24,
     paddingBottom: 40,
+  },
+  scrollContent: {
+    paddingBottom: 100,
+    flexGrow: 1,
   },
   progressContainer: {
     marginBottom: 24,
@@ -1050,34 +1041,69 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginTop: 4,
   },
+  buttonContainer: {
+    marginTop: 30,
+    marginBottom: 50,
+    paddingHorizontal: 4,
+  },
   createButton: {
-    marginTop: 20,
-    marginBottom: 20,
-    borderRadius: 20,
+    borderRadius: 25,
     overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
-      height: 6,
+      height: 8,
     },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 6,
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    elevation: 8,
   },
   createButtonGradient: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 18,
-    paddingHorizontal: 24,
-  },
-  createButtonIcon: {
-    marginRight: 8,
+    paddingVertical: 20,
+    paddingHorizontal: 32,
+    minHeight: 60,
   },
   createButtonText: {
-    fontSize: 18,
-    fontWeight: '700',
+    fontSize: 20,
+    fontWeight: '800',
     color: 'white',
+    textAlign: 'center',
+  },
+  modalBackdrop: {
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  successModal: {
+    width: 300,
+    borderRadius: 16,
+    padding: 0,
+  },
+  successContent: {
+    alignItems: 'center',
+    padding: 24,
+  },
+  successIconContainer: {
+    marginBottom: 16,
+  },
+  successTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: colors.primary,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  successMessage: {
+    fontSize: 16,
+    color: colors.text,
+    marginBottom: 24,
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  successButton: {
+    width: '100%',
+    borderRadius: 12,
   },
   createButtonDisabled: {
     shadowOpacity: 0.1,

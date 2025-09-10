@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, Image, Alert } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, StyleSheet, ScrollView, TouchableOpacity, Image, Alert, RefreshControl } from 'react-native';
 import { Layout, Text, Card, Button, Icon, Input } from '@ui-kitten/components';
+import { supabase } from '../lib/supabase';
 import colors from '../lib/colors';
 
 // Iconos
@@ -34,74 +35,176 @@ const TrashIcon = (props) => (
 
 export default function FavoritesView() {
   const [searchQuery, setSearchQuery] = useState('');
-  const [favorites, setFavorites] = useState([
-    {
-      id: 1,
-      name: 'Restaurante El Sabor',
-      category: 'Comida',
-      rating: 4.8,
-      reviews: 127,
-      distance: '0.5 km',
-      address: 'Av. Principal 123',
-      phone: '+593 9 1234 5678',
-      image: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=300',
-      isOpen: true,
-      tags: ['Restaurante', 'Local', 'Familiar'],
-      isFavorite: true
-    },
-    {
-      id: 2,
-      name: 'Barbería Clásica',
-      category: 'Belleza',
-      rating: 4.9,
-      reviews: 89,
-      distance: '1.2 km',
-      address: 'Calle Comercial 456',
-      phone: '+593 9 8765 4321',
-      image: 'https://images.unsplash.com/photo-1585747860715-2ba37e788b70?w=300',
-      isOpen: true,
-      tags: ['Barbería', 'Cortes', 'Estilos'],
-      isFavorite: true
-    },
-    {
-      id: 3,
-      name: 'Ferretería Central',
-      category: 'Ferretería',
-      rating: 4.6,
-      reviews: 203,
-      distance: '0.8 km',
-      address: 'Plaza Central 789',
-      phone: '+593 9 1111 2222',
-      image: 'https://images.unsplash.com/photo-1581094794329-c8112a89af12?w=300',
-      isOpen: false,
-      tags: ['Herramientas', 'Materiales', 'Construcción'],
-      isFavorite: true
-    },
-    {
-      id: 4,
-      name: 'Tienda de Ropa Moda',
-      category: 'Ropa',
-      rating: 4.7,
-      reviews: 156,
-      distance: '1.5 km',
-      address: 'Centro Comercial 321',
-      phone: '+593 9 3333 4444',
-      image: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=300',
-      isOpen: true,
-      tags: ['Ropa', 'Moda', 'Tendencias'],
-      isFavorite: true
-    }
-  ]);
+  const [favorites, setFavorites] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const filteredFavorites = favorites.filter(business =>
-    business.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    business.category.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredFavorites = favorites.filter(post =>
+    post.contenido.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    post.nombre_negocio.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    post.categoria_negocio.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const toggleFavorite = (businessId) => {
+  // Cargar publicaciones favoritas
+  const loadFavorites = async () => {
+    try {
+      setLoading(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        console.log('No hay usuario autenticado');
+        return;
+      }
+
+      console.log('Cargando favoritos para usuario:', user.id);
+
+      // Primero obtener los IDs de las publicaciones favoritas
+      const { data: favoritesData, error: favoritesError } = await supabase
+        .from('publicaciones_favoritas')
+        .select('id, publicacion_id, fecha_guardado')
+        .eq('usuario_id', user.id)
+        .order('fecha_guardado', { ascending: false });
+
+      console.log('Favoritos encontrados:', favoritesData);
+
+      if (favoritesError) {
+        console.error('Error al cargar favoritos:', favoritesError);
+        return;
+      }
+
+      if (!favoritesData || favoritesData.length === 0) {
+        console.log('No se encontraron favoritos');
+        setFavorites([]);
+        return;
+      }
+
+      // Obtener los IDs de las publicaciones
+      const publicacionIds = favoritesData.map(fav => fav.publicacion_id);
+      console.log('IDs de publicaciones a cargar:', publicacionIds);
+
+      // Cargar las publicaciones
+      const { data: publicacionesData, error: publicacionesError } = await supabase
+        .from('publicaciones')
+        .select(`
+          id,
+          contenido,
+          fecha_publicacion,
+          tipo_publicacion,
+          producto_id,
+          estado,
+          fecha_publicacion,
+          fecha_actualizacion,
+          metadata,
+          negocio_id,
+          usuario_id
+        `)
+        .in('id', publicacionIds);
+
+      console.log('Publicaciones cargadas:', publicacionesData);
+
+      if (publicacionesError) {
+        console.error('Error al cargar publicaciones:', publicacionesError);
+        return;
+      }
+
+      // Cargar fotos para cada publicación
+      const publicacionesConFotos = await Promise.all(
+        publicacionesData.map(async (publicacion) => {
+          const { data: fotosData } = await supabase
+            .from('fotos_publicaciones')
+            .select('url_imagen, orden')
+            .eq('publicacion_id', publicacion.id)
+            .order('orden');
+
+          return {
+            ...publicacion,
+            fotos: fotosData ? fotosData.map(foto => foto.url_imagen) : []
+          };
+        })
+      );
+
+      // Cargar información de negocios
+      const negocioIds = [...new Set(publicacionesConFotos.map(p => p.negocio_id))];
+      const { data: negociosData } = await supabase
+        .from('negocios')
+        .select('id, nombre, categoria, logo_url, whatsapp')
+        .in('id', negocioIds);
+
+      // Cargar información de productos
+      const productoIds = [...new Set(publicacionesConFotos.map(p => p.producto_id).filter(Boolean))];
+      let productosData = [];
+      if (productoIds.length > 0) {
+        const { data: productos } = await supabase
+          .from('productos')
+          .select('id, nombre, descripcion, precio, imagen_url, tipo_producto, categoria, stock, disponibilidad, descuento, precio_especial, es_promocion')
+          .in('id', productoIds);
+        productosData = productos || [];
+      }
+
+      // Combinar todos los datos
+      const favoritePosts = publicacionesConFotos.map(publicacion => {
+        const favoriteInfo = favoritesData.find(fav => fav.publicacion_id === publicacion.id);
+        const negocio = negociosData?.find(n => n.id === publicacion.negocio_id);
+        const producto = productosData.find(p => p.id === publicacion.producto_id);
+
+        return {
+          ...publicacion,
+          favorite_id: favoriteInfo.id,
+          fecha_guardado: favoriteInfo.fecha_guardado,
+          nombre_negocio: negocio?.nombre || 'Negocio',
+          categoria_negocio: negocio?.categoria || 'General',
+          logo_negocio: negocio?.logo_url,
+          whatsapp_negocio: negocio?.whatsapp,
+          nombre_producto: producto?.nombre,
+          descripcion_producto: producto?.descripcion,
+          precio_producto: producto?.precio,
+          imagen_producto: producto?.imagen_url,
+          tipo_producto: producto?.tipo_producto,
+          categoria_producto: producto?.categoria,
+          stock_producto: producto?.stock,
+          disponibilidad_producto: producto?.disponibilidad,
+          descuento_producto: producto?.descuento,
+          precio_especial_producto: producto?.precio_especial,
+          es_promocion_producto: producto?.es_promocion
+        };
+      });
+
+      console.log('Favoritos procesados:', favoritePosts);
+      setFavorites(favoritePosts);
+    } catch (error) {
+      console.error('Error al cargar favoritos:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Quitar de favoritos
+  const removeFavorite = async (favoriteId) => {
+    try {
+      const { error } = await supabase
+        .from('publicaciones_favoritas')
+        .delete()
+        .eq('id', favoriteId);
+
+      if (error) {
+        console.error('Error al quitar de favoritos:', error);
+        Alert.alert('Error', 'No se pudo quitar de favoritos');
+        return;
+      }
+
+      // Actualizar la lista local
+      setFavorites(prev => prev.filter(post => post.favorite_id !== favoriteId));
+      Alert.alert('Éxito', 'Se quitó de favoritos');
+    } catch (error) {
+      console.error('Error al quitar de favoritos:', error);
+      Alert.alert('Error', 'No se pudo quitar de favoritos');
+    }
+  };
+
+  // Toggle favorite con confirmación
+  const toggleFavorite = (favoriteId) => {
     Alert.alert(
       'Eliminar de Favoritos',
-      '¿Estás seguro de que quieres eliminar este negocio de tus favoritos?',
+      '¿Estás seguro de que quieres eliminar esta publicación de tus favoritos?',
       [
         {
           text: 'Cancelar',
@@ -110,12 +213,35 @@ export default function FavoritesView() {
         {
           text: 'Eliminar',
           style: 'destructive',
-          onPress: () => {
-            setFavorites(prev => prev.filter(business => business.id !== businessId));
-          },
+          onPress: () => removeFavorite(favoriteId)
         },
       ]
     );
+  };
+
+  // Refresh control
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadFavorites();
+    setRefreshing(false);
+  };
+
+  // Cargar favoritos al montar el componente
+  useEffect(() => {
+    loadFavorites();
+  }, []);
+
+  // Función para formatear tiempo
+  const getTimeAgo = (dateString) => {
+    const now = new Date();
+    const date = new Date(dateString);
+    const diffInSeconds = Math.floor((now - date) / 1000);
+    
+    if (diffInSeconds < 60) return 'unos segundos';
+    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} minutos`;
+    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} horas`;
+    if (diffInSeconds < 2592000) return `${Math.floor(diffInSeconds / 86400)} días`;
+    return `${Math.floor(diffInSeconds / 2592000)} meses`;
   };
 
   const handleContact = (business) => {
@@ -144,104 +270,137 @@ export default function FavoritesView() {
   const renderEmptyState = () => (
     <View style={styles.emptyState}>
       <HeartOutlineIcon style={styles.emptyIcon} fill={colors.lightGray} />
-      <Text style={styles.emptyTitle}>No tienes favoritos</Text>
+      <Text style={styles.emptyTitle}>No tienes favoritos aún</Text>
       <Text style={styles.emptySubtitle}>
-        Agrega negocios a tus favoritos para verlos aquí
+        Las publicaciones que marques como favoritas aparecerán aquí
       </Text>
     </View>
   );
 
-  const renderFavoriteCard = (business) => (
-    <Card key={business.id} style={styles.favoriteCard}>
-      <View style={styles.businessImageContainer}>
-        <Image source={{ uri: business.image }} style={styles.businessImage} />
-        <View style={styles.businessStatus}>
-          <View style={[
-            styles.statusIndicator,
-            business.isOpen ? styles.statusOpen : styles.statusClosed
-          ]}>
-            <Text style={styles.statusText}>
-              {business.isOpen ? 'Abierto' : 'Cerrado'}
+  const renderFavoriteCard = (post) => (
+    <View key={post.id} style={styles.postCard}>
+      {/* Header del post - idéntico a PostCard */}
+      <View style={styles.header}>
+        <View style={styles.businessInfo}>
+          <View style={styles.businessLogoContainer}>
+            {post.logo_negocio ? (
+              <Image 
+                source={{ uri: post.logo_negocio }} 
+                style={styles.businessLogo}
+              />
+            ) : (
+              <View style={styles.businessLogoPlaceholder}>
+                <Icon name="briefcase" style={styles.businessLogoIcon} fill={colors.secondary} />
+              </View>
+            )}
+          </View>
+          
+          <View style={styles.businessDetails}>
+            <Text style={styles.businessName}>{post.nombre_negocio}</Text>
+            <Text style={styles.businessCategory}>{post.categoria_negocio}</Text>
+            <Text style={styles.postTime}>
+              Guardado hace {getTimeAgo(post.fecha_guardado)}
             </Text>
           </View>
         </View>
         
         <TouchableOpacity
           style={styles.favoriteButton}
-          onPress={() => toggleFavorite(business.id)}
+          onPress={() => toggleFavorite(post.favorite_id)}
         >
           <HeartIcon style={styles.favoriteIcon} fill={colors.danger} />
         </TouchableOpacity>
       </View>
-      
-      <View style={styles.businessInfo}>
-        <View style={styles.businessHeader}>
-          <Text style={styles.businessName}>{business.name}</Text>
-          <View style={styles.ratingContainer}>
-            <StarIcon style={styles.starIcon} fill={colors.secondary} />
-            <Text style={styles.ratingText}>{business.rating}</Text>
-            <Text style={styles.reviewsText}>({business.reviews})</Text>
-          </View>
-        </View>
-        
-        <Text style={styles.businessCategory}>{business.category}</Text>
-        
-        <View style={styles.businessTags}>
-          {business.tags.map((tag, index) => (
-            <View key={index} style={styles.tag}>
-              <Text style={styles.tagText}>{tag}</Text>
-            </View>
-          ))}
-        </View>
-        
-        <View style={styles.businessDetails}>
-          <View style={styles.detailItem}>
-            <LocationIcon style={styles.detailIcon} fill={colors.secondary} />
-            <Text style={styles.detailText}>{business.address}</Text>
+
+      {/* Contenido del post - idéntico a PostCard */}
+      <Text style={styles.content}>{post.contenido}</Text>
+
+      {/* Información del producto - idéntico a PostCard */}
+      {post.nombre_producto && (
+        <View style={styles.productInfo}>
+          <View style={styles.productImageContainer}>
+            {post.imagen_producto ? (
+              <Image 
+                source={{ uri: post.imagen_producto }} 
+                style={styles.productImage}
+              />
+            ) : (
+              <View style={styles.productImagePlaceholder}>
+                <Icon name="cube" style={styles.productIcon} fill={colors.white} />
+              </View>
+            )}
           </View>
           
-          <View style={styles.detailItem}>
-            <PhoneIcon style={styles.detailIcon} fill={colors.secondary} />
-            <Text style={styles.detailText}>{business.phone}</Text>
+          <View style={styles.productDetails}>
+            <Text style={styles.productLabel}>Producto relacionado:</Text>
+            <Text style={styles.productName}>{post.nombre_producto}</Text>
+            <Text style={styles.productPrice}>${post.precio_producto}</Text>
           </View>
           
-          <View style={styles.detailItem}>
-            <Text style={styles.distanceText}>{business.distance}</Text>
+          <View style={styles.productArrow}>
+            <Icon name="arrow-forward" style={styles.arrowIcon} fill={colors.white} />
           </View>
         </View>
-        
-        <View style={styles.businessActions}>
-          <Button
-            style={styles.viewButton}
-            size="small"
-            appearance="outline"
-            onPress={() => handleViewDetails(business)}
-          >
-            Ver Detalles
-          </Button>
-          
-          <Button
-            style={styles.contactButton}
-            size="small"
-            onPress={() => handleContact(business)}
-          >
-            Contactar
-          </Button>
+      )}
+
+      {/* Fotos - idéntico a PostCard */}
+      {post.fotos && post.fotos.length > 0 && (
+        <View style={styles.photosContainer}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            {post.fotos.map((foto, index) => (
+              <Image
+                key={index}
+                source={{ uri: foto }}
+                style={styles.photo}
+              />
+            ))}
+          </ScrollView>
         </View>
-      </View>
-    </Card>
+      )}
+    </View>
   );
 
   return (
     <Layout style={styles.container}>
+      {/* Header consistente con otras vistas */}
+      <View style={styles.enhancedHeader}>
+        <View style={styles.headerBackground}>
+          <View style={styles.headerGradient} />
+        </View>
+        
+        <View style={styles.headerContent}>
+          <View style={styles.headerLeft}>
+            <View style={styles.appLogoContainer}>
+              <HeartIcon style={styles.appLogoIcon} fill={colors.white} />
+            </View>
+            <View style={styles.appTitleContainer}>
+              <Text style={styles.appTitle}>Favoritos</Text>
+              <Text style={styles.appSubtitle}>Tus productos preferidos</Text>
+            </View>
+          </View>
+        </View>
+      </View>
+
       <ScrollView 
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[colors.secondary]}
+            tintColor={colors.secondary}
+          />
+        }
       >
         {renderSearchBar()}
         
-        {filteredFavorites.length === 0 ? (
+        {loading ? (
+          <View style={styles.loadingState}>
+            <Text style={styles.loadingText}>Cargando favoritos...</Text>
+          </View>
+        ) : filteredFavorites.length === 0 ? (
           renderEmptyState()
         ) : (
           <View style={styles.favoritesContainer}>
@@ -257,6 +416,63 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.white,
+  },
+  // Header consistente con otras vistas
+  enhancedHeader: {
+    position: 'relative',
+    paddingTop: 20,
+    paddingBottom: 20,
+    paddingHorizontal: 20,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    overflow: 'hidden',
+  },
+  headerBackground: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: colors.secondary,
+  },
+  headerGradient: {
+    flex: 1,
+    backgroundColor: colors.secondary,
+  },
+  headerContent: {
+    position: 'relative',
+    zIndex: 1,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  appLogoContainer: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  appLogoIcon: {
+    width: 24,
+    height: 24,
+  },
+  appTitleContainer: {
+    flex: 1,
+  },
+  appTitle: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: colors.white,
+    marginBottom: 4,
+  },
+  appSubtitle: {
+    fontSize: 16,
+    color: 'rgba(255, 255, 255, 0.9)',
+    fontWeight: '500',
   },
   scrollView: {
     flex: 1,
@@ -277,183 +493,181 @@ const styles = StyleSheet.create({
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 60,
+    paddingVertical: 80,
+    paddingHorizontal: 40,
   },
   emptyIcon: {
-    width: 80,
-    height: 80,
-    marginBottom: 16,
+    width: 100,
+    height: 100,
+    marginBottom: 24,
   },
   emptyTitle: {
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: 'bold',
     color: colors.primary,
-    marginBottom: 8,
+    marginBottom: 12,
     textAlign: 'center',
   },
   emptySubtitle: {
-    fontSize: 16,
+    fontSize: 18,
     color: colors.secondary,
     textAlign: 'center',
-    lineHeight: 22,
+    lineHeight: 26,
+    fontWeight: '500',
   },
-  favoritesContainer: {
-    gap: 20,
-  },
-  favoriteCard: {
-    borderRadius: 16,
-    marginBottom: 0,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 6,
-  },
-  businessImageContainer: {
-    position: 'relative',
-    marginBottom: 16,
-  },
-  businessImage: {
-    width: '100%',
-    height: 200,
-    borderRadius: 12,
-  },
-  businessStatus: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-  },
-  statusIndicator: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-  statusOpen: {
-    backgroundColor: colors.success + '20',
-    borderWidth: 1,
-    borderColor: colors.success,
-  },
-  statusClosed: {
-    backgroundColor: colors.danger + '20',
-    borderWidth: 1,
-    borderColor: colors.danger,
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.primary,
-  },
-  favoriteButton: {
-    position: 'absolute',
-    top: 12,
-    left: 12,
+  // Estilos idénticos a PostCard
+  postCard: {
     backgroundColor: colors.white,
-    borderRadius: 20,
-    padding: 8,
+    marginBottom: 16,
+    borderRadius: 16,
+    padding: 16,
     shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
     elevation: 3,
   },
-  favoriteIcon: {
-    width: 20,
-    height: 20,
-  },
-  businessInfo: {
-    padding: 4,
-  },
-  businessHeader: {
+  header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 8,
+    marginBottom: 12,
   },
-  businessName: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: colors.primary,
+  businessInfo: {
+    flexDirection: 'row',
     flex: 1,
+  },
+  businessLogoContainer: {
     marginRight: 12,
   },
-  ratingContainer: {
-    flexDirection: 'row',
+  businessLogo: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+  },
+  businessLogoPlaceholder: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: colors.lightGray,
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  starIcon: {
-    width: 16,
-    height: 16,
-    marginRight: 4,
+  businessLogoIcon: {
+    width: 24,
+    height: 24,
   },
-  ratingText: {
-    fontSize: 14,
-    fontWeight: '600',
+  businessDetails: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  businessName: {
+    fontSize: 16,
+    fontWeight: 'bold',
     color: colors.primary,
-    marginRight: 4,
-  },
-  reviewsText: {
-    fontSize: 12,
-    color: colors.secondary,
+    marginBottom: 2,
   },
   businessCategory: {
     fontSize: 14,
     color: colors.secondary,
-    marginBottom: 12,
-    fontWeight: '500',
+    fontWeight: '600',
+    marginBottom: 2,
   },
-  businessTags: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 16,
-  },
-  tag: {
-    backgroundColor: colors.lightGray,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  tagText: {
+  postTime: {
     fontSize: 12,
     color: colors.primary,
-    fontWeight: '500',
+    opacity: 0.7,
   },
-  businessDetails: {
-    marginBottom: 16,
+  favoriteButton: {
+    padding: 8,
   },
-  detailItem: {
+  favoriteIcon: {
+    width: 24,
+    height: 24,
+  },
+  content: {
+    fontSize: 16,
+    color: colors.primary,
+    lineHeight: 24,
+    marginBottom: 12,
+  },
+  productInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    backgroundColor: colors.secondary,
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
   },
-  detailIcon: {
-    width: 16,
-    height: 16,
+  productImageContainer: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+    marginRight: 12,
+    overflow: 'hidden',
+  },
+  productImage: {
+    width: '100%',
+    height: '100%',
+  },
+  productImagePlaceholder: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  productIcon: {
+    width: 24,
+    height: 24,
+  },
+  productDetails: {
+    flex: 1,
+  },
+  productLabel: {
+    fontSize: 12,
+    color: colors.white,
+    opacity: 0.9,
+    marginBottom: 4,
+  },
+  productName: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: colors.white,
+    marginBottom: 4,
+  },
+  productPrice: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: colors.white,
+  },
+  productArrow: {
+    marginLeft: 8,
+  },
+  arrowIcon: {
+    width: 20,
+    height: 20,
+  },
+  photosContainer: {
+    marginBottom: 12,
+  },
+  photo: {
+    width: 200,
+    height: 200,
+    borderRadius: 12,
     marginRight: 8,
   },
-  detailText: {
-    fontSize: 14,
+  loadingState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+  },
+  loadingText: {
+    fontSize: 16,
     color: colors.primary,
-    flex: 1,
+    textAlign: 'center',
   },
-  distanceText: {
-    fontSize: 14,
-    color: colors.secondary,
-    fontWeight: '600',
-  },
-  businessActions: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  viewButton: {
-    flex: 1,
-    borderColor: colors.secondary,
-    borderRadius: 12,
-  },
-  contactButton: {
-    flex: 1,
-    backgroundColor: colors.secondary,
-    borderColor: colors.secondary,
-    borderRadius: 12,
+  favoritesContainer: {
+    gap: 16,
   },
 });

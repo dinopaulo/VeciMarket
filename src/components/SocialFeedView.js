@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase';
 import colors from '../lib/colors';
 import PostCard from './PostCard';
 import CreatePostView from './CreatePostView';
+import ProductDetailView from './ProductDetailView';
 
 export default function SocialFeedView({ userProfile, onNavigateToBusiness }) {
   console.log('🚀 SocialFeedView: Componente iniciado');
@@ -19,6 +20,7 @@ export default function SocialFeedView({ userProfile, onNavigateToBusiness }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [hasMore, setHasMore] = useState(true);
   const [currentPage, setCurrentPage] = useState(0);
+  const [selectedProduct, setSelectedProduct] = useState(null);
 
   const POSTS_PER_PAGE = 10;
 
@@ -219,6 +221,16 @@ export default function SocialFeedView({ userProfile, onNavigateToBusiness }) {
     loadPosts(true);
   };
 
+  // Navegar al detalle del producto
+  const handleNavigateToProduct = (product) => {
+    setSelectedProduct(product);
+  };
+
+  // Cerrar vista de producto
+  const handleCloseProduct = () => {
+    setSelectedProduct(null);
+  };
+
   // Filtrar publicaciones por búsqueda
   const filteredPosts = posts.filter(post => {
     if (!searchQuery.trim()) return true;
@@ -331,6 +343,17 @@ export default function SocialFeedView({ userProfile, onNavigateToBusiness }) {
     );
   }
 
+  if (selectedProduct) {
+    return (
+      <ProductDetailView
+        product={selectedProduct}
+        onBack={handleCloseProduct}
+        onEdit={() => {}} // No implementado aún
+        onDelete={() => {}} // No implementado aún
+      />
+    );
+  }
+
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -341,7 +364,7 @@ export default function SocialFeedView({ userProfile, onNavigateToBusiness }) {
               <Ionicons name="people" size={28} color={colors.white} />
             </View>
             <View style={styles.headerTextContainer}>
-              <Text style={styles.headerTitle}>Feed Social</Text>
+              <Text style={styles.headerTitle}>Muro Social</Text>
               <Text style={styles.headerSubtitle}>Descubre lo que comparten los negocios</Text>
             </View>
           </View>
@@ -385,6 +408,7 @@ export default function SocialFeedView({ userProfile, onNavigateToBusiness }) {
                 post={post}
                 userProfile={userProfile}
                 onPostUpdated={() => loadPosts(true)}
+                onNavigateToProduct={handleNavigateToProduct}
               />
             ))}
             
@@ -622,7 +646,7 @@ const styles = StyleSheet.create({
   // Estilos para FAB
   fab: {
     position: 'absolute',
-    bottom: 20,
+    bottom: 100, // Por encima de la barra de navegación
     right: 20,
     width: 56,
     height: 56,
@@ -635,6 +659,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 8,
+    borderWidth: 2,
+    borderColor: colors.white,
   },
   fabIcon: {
     width: 24,
