@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, Image, Text, Dimensions } from 'react-native';
-import { Input, Button, Card, Layout, Icon, Text as UIText, TopNavigation, TopNavigationAction } from '@ui-kitten/components';
+import { Input, Button, Card, Layout, Icon, Text as UIText, TopNavigation, TopNavigationAction, Modal } from '@ui-kitten/components';
 import { supabase } from '../lib/supabase';
 import colors from '../lib/colors';
 import CartView from './CartView';
@@ -26,7 +26,17 @@ export default function MainFeedView({ userProfile, onNavigateToBusiness, onLogo
   // Estados para navegación
   const [currentView, setCurrentView] = useState('main'); // 'main' o 'createPost'
   
+  // Estados para modal de desarrollo
+  const [showDevelopmentModal, setShowDevelopmentModal] = useState(false);
+  const [developmentFeature, setDevelopmentFeature] = useState('');
+  
   const { width: screenWidth } = Dimensions.get('window');
+  
+  // Función para mostrar modal de desarrollo
+  const showDevelopmentFeature = (featureName) => {
+    setDevelopmentFeature(featureName);
+    setShowDevelopmentModal(true);
+  };
   
   const CATEGORIAS = [
     'Todos', 'Restaurante', 'Tienda', 'Servicios', 'Salud', 
@@ -761,7 +771,7 @@ export default function MainFeedView({ userProfile, onNavigateToBusiness, onLogo
         <View style={styles.headerContent}>
           <View style={styles.headerLeft}>
             <View style={styles.appLogoContainer}>
-              <PersonIcon style={styles.appLogoIcon} fill={colors.secondary} />
+              <PersonIcon style={styles.appLogoIcon} fill={colors.white} />
             </View>
             <View style={styles.appTitleContainer}>
               <Text style={styles.appTitle}>Mi Perfil</Text>
@@ -776,11 +786,18 @@ export default function MainFeedView({ userProfile, onNavigateToBusiness, onLogo
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.contentContainer}
       >
-        <View style={styles.profileSection}>
+        {/* Tarjeta principal de perfil */}
+        <View style={styles.profileCard}>
           <View style={styles.profileHeader}>
-            <View style={styles.profileAvatar}>
-              <PersonIcon style={styles.profileAvatarIcon} fill={colors.primary} />
+            <View style={styles.profileAvatarContainer}>
+              <View style={styles.profileAvatar}>
+                <PersonIcon style={styles.profileAvatarIcon} fill={colors.white} />
+              </View>
+              <View style={styles.profileStatusBadge}>
+                <Text style={styles.profileStatusText}>Activo</Text>
+              </View>
             </View>
+            
             <View style={styles.profileInfo}>
               <Text style={styles.profileName}>
                 {userProfile?.nombre || 'Usuario'}
@@ -788,23 +805,146 @@ export default function MainFeedView({ userProfile, onNavigateToBusiness, onLogo
               <Text style={styles.profileEmail}>
                 {userProfile?.email || 'usuario@email.com'}
               </Text>
-              <Text style={styles.profileRole}>
-                {userProfile?.rol === 'negocio' ? '🏪 Dueño de Negocio' : '👤 Cliente'}
-              </Text>
+              <View style={styles.profileRoleContainer}>
+                <View style={styles.profileRoleBadge}>
+                  <Text style={styles.profileRoleIcon}>
+                    {userProfile?.rol === 'negocio' ? '🏪' : '👤'}
+                  </Text>
+                  <Text style={styles.profileRole}>
+                    {userProfile?.rol === 'negocio' ? 'Dueño de Negocio' : 'Cliente'}
+                  </Text>
+                </View>
+              </View>
             </View>
           </View>
           
+          {/* Estadísticas del usuario */}
+          <View style={styles.profileStats}>
+            <View style={styles.statItem}>
+              <Text style={styles.statNumber}>12</Text>
+              <Text style={styles.statLabel}>Favoritos</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+              <Text style={styles.statNumber}>5</Text>
+              <Text style={styles.statLabel}>Pedidos</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+              <Text style={styles.statNumber}>3</Text>
+              <Text style={styles.statLabel}>Comentarios</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Opciones de cuenta */}
+        <View style={styles.accountOptions}>
+          <Text style={styles.optionsTitle}>Opciones de Cuenta</Text>
+          
+          <TouchableOpacity 
+            style={styles.optionItem}
+            onPress={() => showDevelopmentFeature('Editar Perfil')}
+          >
+            <View style={styles.optionLeft}>
+              <View style={styles.optionIconContainer}>
+                <Icon name="edit-outline" style={styles.optionIcon} fill={colors.primary} />
+              </View>
+              <Text style={styles.optionText}>Editar Perfil</Text>
+            </View>
+            <Icon name="arrow-right" style={styles.optionArrow} fill={colors.lightGray} />
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.optionItem}
+            onPress={() => showDevelopmentFeature('Configuración')}
+          >
+            <View style={styles.optionLeft}>
+              <View style={styles.optionIconContainer}>
+                <Icon name="settings-outline" style={styles.optionIcon} fill={colors.primary} />
+              </View>
+              <Text style={styles.optionText}>Configuración</Text>
+            </View>
+            <Icon name="arrow-right" style={styles.optionArrow} fill={colors.lightGray} />
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.optionItem}
+            onPress={() => showDevelopmentFeature('Ayuda y Soporte')}
+          >
+            <View style={styles.optionLeft}>
+              <View style={styles.optionIconContainer}>
+                <Icon name="question-mark-circle-outline" style={styles.optionIcon} fill={colors.primary} />
+              </View>
+              <Text style={styles.optionText}>Ayuda y Soporte</Text>
+            </View>
+            <Icon name="arrow-right" style={styles.optionArrow} fill={colors.lightGray} />
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.optionItem}
+            onPress={() => showDevelopmentFeature('Acerca de')}
+          >
+            <View style={styles.optionLeft}>
+              <View style={styles.optionIconContainer}>
+                <Icon name="info-outline" style={styles.optionIcon} fill={colors.primary} />
+              </View>
+              <Text style={styles.optionText}>Acerca de</Text>
+            </View>
+            <Icon name="arrow-right" style={styles.optionArrow} fill={colors.lightGray} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Botón de cerrar sesión */}
+        <View style={styles.logoutSection}>
           <Button
             size="large"
             appearance="outline"
             status="danger"
             onPress={onLogout}
             style={styles.logoutButton}
+            accessoryLeft={(props) => <Icon {...props} name="log-out-outline" />}
           >
             Cerrar Sesión
           </Button>
         </View>
       </ScrollView>
+
+      {/* Modal de funcionalidad en desarrollo */}
+      <Modal
+        visible={showDevelopmentModal}
+        backdropStyle={styles.modalBackdrop}
+        onBackdropPress={() => setShowDevelopmentModal(false)}
+      >
+        <Card style={styles.developmentModal}>
+          <View style={styles.developmentContent}>
+            <View style={styles.developmentIconContainer}>
+              <Icon name="code-outline" style={styles.developmentIcon} fill={colors.primary} />
+            </View>
+            
+            <Text style={styles.developmentTitle}>Funcionalidad en Desarrollo</Text>
+            
+            <Text style={styles.developmentMessage}>
+              La funcionalidad "{developmentFeature}" está actualmente en desarrollo.
+              Pronto estará disponible para ti.
+            </Text>
+            
+            <View style={styles.developmentFeatures}>
+              <Text style={styles.developmentFeaturesTitle}>Próximamente:</Text>
+              <Text style={styles.developmentFeatureItem}>• Personalización de perfil</Text>
+              <Text style={styles.developmentFeatureItem}>• Configuraciones avanzadas</Text>
+              <Text style={styles.developmentFeatureItem}>• Soporte 24/7</Text>
+              <Text style={styles.developmentFeatureItem}>• Información detallada de la app</Text>
+            </View>
+            
+            <Button
+              style={styles.developmentButton}
+              onPress={() => setShowDevelopmentModal(false)}
+            >
+              Entendido
+            </Button>
+          </View>
+        </Card>
+      </Modal>
     </>
   );
 
@@ -1507,58 +1647,249 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: 8,
   },
-  // Estilos para vista de perfil
-  profileSection: {
-    padding: 20,
-    alignItems: 'center',
+  // Estilos para vista de perfil mejorada
+  profileCard: {
     backgroundColor: colors.white,
-    borderRadius: 16,
+    borderRadius: 20,
+    padding: 24,
+    marginBottom: 20,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  profileHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 24,
+  },
+  profileAvatarContainer: {
+    position: 'relative',
+    marginRight: 20,
+  },
+  profileAvatar: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: colors.secondary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: colors.secondary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  profileAvatarIcon: {
+    width: 50,
+    height: 50,
+  },
+  profileStatusBadge: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    backgroundColor: colors.success,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 3,
+    borderColor: colors.white,
+  },
+  profileStatusText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: colors.white,
+  },
+  profileInfo: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  profileName: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: colors.primary,
+    marginBottom: 6,
+  },
+  profileEmail: {
+    fontSize: 16,
+    color: colors.secondary,
+    marginBottom: 12,
+    fontWeight: '500',
+  },
+  profileRoleContainer: {
+    marginBottom: 8,
+  },
+  profileRoleBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.lightGray,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    alignSelf: 'flex-start',
+  },
+  profileRoleIcon: {
+    fontSize: 16,
+    marginRight: 6,
+  },
+  profileRole: {
+    fontSize: 14,
+    color: colors.primary,
+    fontWeight: '600',
+  },
+  profileStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: colors.lightGray,
+  },
+  statItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  statNumber: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: colors.primary,
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 12,
+    color: colors.secondary,
+    fontWeight: '600',
+  },
+  statDivider: {
+    width: 1,
+    backgroundColor: colors.lightGray,
+    marginHorizontal: 16,
+  },
+  accountOptions: {
+    backgroundColor: colors.white,
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 20,
     shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 8,
     elevation: 2,
   },
-  profileHeader: {
+  optionsTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: colors.primary,
+    marginBottom: 16,
+  },
+  optionItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 30,
+    justifyContent: 'space-between',
+    paddingVertical: 16,
+    paddingHorizontal: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.lightGray,
   },
-  profileAvatar: {
+  optionLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  optionIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.lightGray,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  optionIcon: {
+    width: 20,
+    height: 20,
+  },
+  optionText: {
+    fontSize: 16,
+    color: colors.primary,
+    fontWeight: '500',
+  },
+  optionArrow: {
+    width: 20,
+    height: 20,
+  },
+  logoutSection: {
+    paddingHorizontal: 4,
+    marginBottom: 20,
+  },
+  logoutButton: {
+    borderRadius: 16,
+    borderColor: colors.danger,
+    borderWidth: 2,
+  },
+  // Estilos para modal de desarrollo
+  modalBackdrop: {
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  developmentModal: {
+    margin: 20,
+    borderRadius: 20,
+    maxWidth: 400,
+    alignSelf: 'center',
+  },
+  developmentContent: {
+    alignItems: 'center',
+    padding: 24,
+  },
+  developmentIconContainer: {
     width: 80,
     height: 80,
     borderRadius: 40,
     backgroundColor: colors.lightGray,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 20,
+    marginBottom: 20,
   },
-  profileAvatarIcon: {
+  developmentIcon: {
     width: 40,
     height: 40,
   },
-  profileInfo: {
-    flex: 1,
-  },
-  profileName: {
-    fontSize: 20,
+  developmentTitle: {
+    fontSize: 24,
     fontWeight: 'bold',
     color: colors.primary,
-    marginBottom: 4,
+    marginBottom: 16,
+    textAlign: 'center',
   },
-  profileEmail: {
-    fontSize: 14,
-    color: colors.secondary,
-    marginBottom: 4,
-  },
-  profileRole: {
+  developmentMessage: {
     fontSize: 16,
     color: colors.secondary,
-    fontWeight: '600',
+    textAlign: 'center',
+    lineHeight: 24,
+    marginBottom: 20,
   },
-  logoutButton: {
-    width: '100%',
-    borderColor: colors.danger,
+  developmentFeatures: {
+    alignSelf: 'stretch',
+    marginBottom: 24,
+  },
+  developmentFeaturesTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: colors.primary,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  developmentFeatureItem: {
+    fontSize: 14,
+    color: colors.secondary,
+    marginBottom: 6,
+    textAlign: 'left',
+  },
+  developmentButton: {
+    borderRadius: 16,
+    backgroundColor: colors.secondary,
+    borderColor: colors.secondary,
+    minWidth: 120,
   },
   // Estilos para publicaciones
   publicationItem: {
