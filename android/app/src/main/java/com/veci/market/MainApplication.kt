@@ -1,4 +1,4 @@
-package com.anonymous.VeciMarket
+package com.veci.market
 
 import android.app.Application
 import android.content.res.Configuration

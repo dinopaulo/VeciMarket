@@ -21,14 +21,16 @@
         "foregroundImage": "./assets/iconn.png",
         "backgroundColor": "#FFFFFF"
       },
-      "package": "com.anonymous.VeciMarket"
+      "package": "com.veci.market",
+      "versionCode": 4
     },
     "extra": {
-      "eas": {
-        "projectId": "3ae0134c-f219-43d4-a7c2-c317a3cec499"
-      },
       "supabaseUrl": "https://qbgjqnggftonicxluphi.supabase.co",
-      "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFiZ2pxbmdnZnRvbmljeGx1cGhpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU1Mzc1NTQsImV4cCI6MjA3MTExMzU1NH0.mrR4pzEzRLQI0CibFJWUbk6lsFC3dDLWP2_3OdDzZng"
-    }
+      "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFiZ2pxbmdnZnRvbmljeGx1cGhpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU1Mzc1NTQsImV4cCI6MjA3MTExMzU1NH0.mrR4pzEzRLQI0CibFJWUbk6lsFC3dDLWP2_3OdDzZng",
+      "eas": {
+        "projectId": "2536ef13-1f83-45bf-8b69-5132ed317982"
+      }
+    },
+    "owner": "dinopaulo12"
   }
 }
