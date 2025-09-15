@@ -183,7 +183,7 @@ export default function AuthScreen() {
 
     // Por defecto, mostrar el formulario de autenticación
     return (
-      <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
+      <Animated.View style={{ flex: 1, opacity: fadeAnim, backgroundColor: colors.white }}>
         <KeyboardAvoidingView 
           style={styles.keyboardAvoidingView}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -193,8 +193,9 @@ export default function AuthScreen() {
             contentContainerStyle={styles.scrollContent}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
+            style={{ backgroundColor: colors.white }}
           >
-            <Layout style={styles.container}>
+            <Layout style={[styles.container, { backgroundColor: colors.white }]}>
               <View style={styles.logoContainer}>
                 <Image
                   source={require('../../assets/iconn.png')}
@@ -237,17 +238,20 @@ export default function AuthScreen() {
 const styles = StyleSheet.create({
   keyboardAvoidingView: {
     flex: 1,
+    backgroundColor: colors.white,
   },
   scrollContent: {
     flexGrow: 1,
     justifyContent: 'center',
     paddingHorizontal: 20,
     paddingVertical: 40,
+    backgroundColor: colors.white,
   },
   container: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: colors.white,
   },
   logoContainer: {
     alignItems: 'center',

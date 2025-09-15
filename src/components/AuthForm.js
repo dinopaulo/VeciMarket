@@ -292,7 +292,7 @@ export default function AuthForm({ mode = 'login', onAuthSuccess }) {
   }
 
   return (
-    <Layout style={styles.container}>
+    <Layout style={[styles.container, { backgroundColor: colors.white }]}>
       {!!error && (
         <Text status="danger" category="s2" style={styles.errorText}>
           {error}
@@ -453,6 +453,7 @@ export default function AuthForm({ mode = 'login', onAuthSuccess }) {
 const styles = StyleSheet.create({
   container: {
     alignSelf: 'stretch',
+    backgroundColor: colors.white,
   },
   errorText: {
     marginBottom: 12,

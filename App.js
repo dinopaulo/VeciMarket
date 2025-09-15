@@ -6,7 +6,7 @@ import { EvaIconsPack } from '@ui-kitten/eva-icons';
 import AuthScreen from './src/pages/AuthScreen';
 import colors from './src/lib/colors';
 
-// Tema personalizado con los colores del usuario
+// Tema personalizado con los colores del usuario - FORZADO A MODO CLARO
 const customTheme = {
   ...eva.light,
   'color-primary-100': colors.tertiary,
@@ -38,9 +38,9 @@ export default function App() {
   return (
     <>
       <IconRegistry icons={EvaIconsPack} />
-      <ApplicationProvider {...eva} theme={customTheme}>
+      <ApplicationProvider mapping={eva.mapping} theme={customTheme}>
         <AuthScreen />
-        <StatusBar style="auto" />
+        <StatusBar style="light" backgroundColor={colors.primary} />
       </ApplicationProvider>
     </>
   );
